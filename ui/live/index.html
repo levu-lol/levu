@@ -1,0 +1,552 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>WETH/USDG — Lane Terminal</title>
+<meta name="description" content="Live oracle aggregation and risk engine over Robinhood Chain Uniswap pools.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans+Condensed:wght@600;700&family=IBM+Plex+Sans:wght@400;500&display=swap">
+<style>
+:root{
+  --paper:#F4F5F7;--surface:#FFF;--surface-2:#ECEEF1;
+  --rule:#D6DAE0;--rule-soft:#E4E7EB;
+  --text:#171B21;--text-2:#4A525D;--text-3:#6B7480;
+  --ember:#B96A18;--ember-soft:#F2E3D0;
+  --up:#3F7659;--down:#A34733;--grid:#E1E4E9;
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    --paper:#101317;--surface:#171B21;--surface-2:#1E232B;
+    --rule:#2C333D;--rule-soft:#232830;
+    --text:#E8EBEF;--text-2:#A3ACB8;--text-3:#7C8593;
+    --ember:#E09242;--ember-soft:#3A2A17;
+    --up:#6BAE87;--down:#D2705A;--grid:#242A33;
+  }
+}
+:root[data-theme="dark"]{
+  --paper:#101317;--surface:#171B21;--surface-2:#1E232B;
+  --rule:#2C333D;--rule-soft:#232830;
+  --text:#E8EBEF;--text-2:#A3ACB8;--text-3:#7C8593;
+  --ember:#E09242;--ember-soft:#3A2A17;
+  --up:#6BAE87;--down:#D2705A;--grid:#242A33;
+}
+*{box-sizing:border-box}
+html,body{height:100%}
+body{
+  margin:0;background:var(--paper);color:var(--text);
+  font-family:"IBM Plex Sans",system-ui,sans-serif;font-size:14px;
+  display:flex;flex-direction:column;-webkit-font-smoothing:antialiased;
+}
+.num{font-family:"IBM Plex Mono",ui-monospace,monospace;font-variant-numeric:tabular-nums}
+.lbl{font-family:"IBM Plex Mono",monospace;font-size:9.5px;letter-spacing:.14em;
+  text-transform:uppercase;color:var(--text-3)}
+
+header{display:flex;align-items:center;gap:26px;flex-wrap:wrap;
+  padding:10px 18px;border-bottom:1px solid var(--rule);background:var(--surface)}
+.pair{display:flex;align-items:baseline;gap:10px}
+.pair h1{margin:0;font-family:"IBM Plex Sans Condensed",sans-serif;
+  font-size:19px;font-weight:700;letter-spacing:-.01em}
+.pair .chain{font-size:11px;color:var(--text-3)}
+.last{display:flex;align-items:baseline;gap:8px}
+#last{font-size:26px;font-weight:500;letter-spacing:-.015em;transition:color .18s}
+#last.up{color:var(--up)}#last.down{color:var(--down)}
+#arrow{font-size:12px;width:9px;display:inline-block}
+.stat{display:flex;flex-direction:column;gap:1px;min-width:70px}
+.stat .v{font-size:14px;font-weight:500}
+.stat .v.sm{font-size:12.5px}
+.conn{margin-left:auto;display:flex;align-items:center;gap:7px;font-size:11px;color:var(--text-3)}
+.dot{width:7px;height:7px;border-radius:50%;background:var(--text-3)}
+.dot.on{background:var(--up)}.dot.off{background:var(--down)}
+
+main{flex:1;display:grid;grid-template-columns:minmax(0,1fr) 310px;min-height:0}
+.chartpane{display:flex;flex-direction:column;min-width:0;border-right:1px solid var(--rule)}
+.grp{display:flex;border:1px solid var(--rule);border-radius:3px;overflow:hidden}
+.grp button{appearance:none;border:none;background:transparent;cursor:pointer;
+  font:inherit;font-size:10.5px;letter-spacing:.04em;text-transform:uppercase;
+  color:var(--text-3);padding:3px 8px;border-right:1px solid var(--rule);transition:background .12s,color .12s}
+.grp button:last-child{border-right:none}
+.grp button:hover{background:var(--grid);color:var(--text-2)}
+.grp button.on{background:var(--ember);color:var(--paper)}
+.grp button:focus-visible,.live:focus-visible{outline:2px solid var(--ember);outline-offset:1px}
+.live{appearance:none;border:1px solid var(--ember);background:transparent;color:var(--ember);
+  cursor:pointer;font:inherit;font-size:10.5px;letter-spacing:.04em;text-transform:uppercase;
+  padding:3px 9px;border-radius:3px}
+.live:hover{background:var(--ember);color:var(--paper)}
+.live.hide{display:none}
+.ohlc{display:flex;gap:11px;font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:10.5px;
+  color:var(--text-3);min-height:14px;align-items:center}
+.ohlc b{font-weight:500;color:var(--text-2)}
+.ohlc .u{color:var(--up)}.ohlc .d{color:var(--down)}
+.chartbar{display:flex;align-items:center;gap:14px;flex-wrap:wrap;
+  padding:8px 16px;border-bottom:1px solid var(--rule-soft);background:var(--surface)}
+.key{display:inline-flex;align-items:center;gap:6px;font-size:11px;color:var(--text-3)}
+.key i{width:13px;height:2px;display:inline-block;border-radius:1px}
+.key i.index{background:var(--ember)}
+.key i.mark{background:var(--text-2)}
+.key i.band{background:var(--ember);opacity:.22;height:8px}
+#wrap{flex:1;position:relative;min-height:250px;background:var(--surface)}
+canvas{position:absolute;inset:0;width:100%;height:100%;display:block}
+
+.rail{display:flex;flex-direction:column;min-height:0;background:var(--surface)}
+.sec{border-bottom:1px solid var(--rule-soft)}
+.sechead{display:flex;justify-content:space-between;align-items:baseline;padding:9px 14px 6px}
+.venues{padding:0 14px 10px;display:flex;flex-direction:column;gap:6px}
+.venue{display:grid;grid-template-columns:1fr auto;gap:2px 10px;align-items:baseline}
+.venue .n{font-size:11.5px;color:var(--text-2)}
+.venue .p{font-size:12.5px;font-weight:500}
+.venue .d{grid-column:1;font-size:10px;color:var(--text-3)}
+.venue.out .n,.venue.out .p{color:var(--text-3);text-decoration:line-through}
+.vbar{grid-column:1/-1;height:3px;background:var(--grid);border-radius:1px;overflow:hidden}
+.vbar i{display:block;height:100%;background:var(--ember);opacity:.6}
+
+.tape{flex:1;overflow-y:auto;padding:0 14px 10px;min-height:110px}
+.trow{display:grid;grid-template-columns:54px 1fr auto;gap:8px;font-size:11.5px;
+  padding:2px 0;border-bottom:1px solid var(--rule-soft)}
+.trow .t{color:var(--text-3)}
+.trow .p.up{color:var(--up)}.trow .p.down{color:var(--down)}
+.trow .c{color:var(--text-3)}
+
+.risk{display:grid;grid-template-columns:repeat(auto-fit,minmax(148px,1fr));
+  border-top:1px solid var(--rule);background:var(--surface)}
+.inst{padding:10px 16px;border-right:1px solid var(--rule-soft);
+  display:flex;flex-direction:column;gap:3px}
+.inst:last-child{border-right:none}
+.inst .v{font-size:19px;font-weight:500;letter-spacing:-.01em}
+.inst .s{font-size:11px;color:var(--text-3)}
+.scale{display:flex;gap:1px;margin-top:5px}
+.scale div{flex:1;display:flex;flex-direction:column;gap:2px;align-items:center;
+  padding:3px 2px;background:var(--surface-2);border-radius:1px}
+.scale .u{font-family:"IBM Plex Mono",monospace;font-size:9px;color:var(--text-3)}
+.scale .r{font-family:"IBM Plex Mono",monospace;font-size:10.5px;font-weight:500}
+.scale div:last-child .r{color:var(--ember)}
+
+footer{padding:7px 18px;border-top:1px solid var(--rule);font-size:11px;color:var(--text-3);
+  display:flex;gap:8px 22px;flex-wrap:wrap;justify-content:space-between;background:var(--surface)}
+
+@media (max-width:900px){
+  main{grid-template-columns:1fr}
+  .chartpane{border-right:none;border-bottom:1px solid var(--rule)}
+  #wrap{min-height:210px}
+}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="pair"><h1>WETH/USDG</h1><span class="chain">Robinhood Chain · 4663</span></div>
+  <div class="last"><span id="arrow" class="num"></span><span id="last" class="num">—</span></div>
+  <div class="stat"><span class="lbl">Index</span><span id="index" class="v num">—</span></div>
+  <div class="stat"><span class="lbl">Mark</span><span id="mark" class="v num">—</span></div>
+  <div class="stat"><span class="lbl">Band</span><span id="band" class="v num sm">±50 bps</span></div>
+  <div class="stat"><span class="lbl">Confidence</span><span id="conf" class="v num">—</span></div>
+  <div class="stat"><span class="lbl">Sources</span><span id="srcs" class="v num sm">—</span></div>
+  <div class="conn">
+    <span id="age" class="num" title="time since the last successful read">—</span>
+    <span id="dot" class="dot"></span><span id="connText">connecting…</span>
+  </div>
+</header>
+
+<main>
+  <section class="chartpane">
+    <div class="chartbar">
+      <div class="grp" id="tfs"></div>
+      <div class="grp" id="types">
+        <button data-type="candle" class="on">Candles</button>
+        <button data-type="line">Line</button>
+        <button data-type="area">Area</button>
+      </div>
+      <div class="grp">
+        <button id="tBand" class="on">Band</button>
+        <button id="tMark" class="on">Mark</button>
+        <button id="tDepth" class="on">Depth</button>
+      </div>
+      <button id="live" class="live hide">Go to latest ›</button>
+      <div class="ohlc" id="ohlc"></div>
+      <span class="key" style="margin-left:auto"><span id="ticks" class="num">0</span>&nbsp;ticks ·
+        <span id="lat" class="num">—</span>&nbsp;ms</span>
+    </div>
+    <div id="wrap"><canvas id="chart"></canvas></div>
+  </section>
+
+  <aside class="rail">
+    <div class="sec">
+      <div class="sechead"><span class="lbl">Venues</span><span class="lbl" id="vnote">pools</span></div>
+      <div class="venues" id="venues"><div class="lbl">discovering pools…</div></div>
+    </div>
+    <div class="sec" style="flex:1;display:flex;flex-direction:column;min-height:0">
+      <div class="sechead"><span class="lbl">Tape</span><span class="lbl">index · conf</span></div>
+      <div class="tape" id="tape"></div>
+    </div>
+  </aside>
+</main>
+
+<section class="risk">
+  <div class="inst">
+    <span class="lbl">Market health</span><span class="v num" id="score">—</span>
+    <span class="s" id="scoreSub">lists above 5,500</span>
+  </div>
+  <div class="inst">
+    <span class="lbl">Leverage</span><span class="v num" id="lev">—</span>
+    <span class="s" id="levSub">granted by the engine</span>
+  </div>
+  <div class="inst">
+    <span class="lbl">Safe capacity</span><span class="v num" id="cap">—</span>
+    <span class="s">open interest the lane could carry</span>
+  </div>
+  <div class="inst" style="grid-column:span 2">
+    <span class="lbl">Capacity rent, by utilisation</span>
+    <span class="s" id="rentSub">no positions open — this is what exposure would cost</span>
+    <div class="scale" id="rentScale"></div>
+  </div>
+  <div class="inst">
+    <span class="lbl">Executable depth</span><span class="v num" id="depth">—</span>
+    <span class="s">within ±2%, haircut applied</span>
+  </div>
+  <div class="inst">
+    <span class="lbl">Maintenance</span><span class="v num" id="maint">—</span>
+    <span class="s">of notional</span>
+  </div>
+</section>
+
+<footer>
+  <span id="foot">Prices read live from Uniswap pools on Robinhood Chain, straight from the browser. Risk figures are computed here from the same constants the Rust VM and Go control plane use. No positions exist in this market.</span>
+  <span class="num" id="stamp">—</span>
+</footer>
+
+<script type="module">
+import { Chart, TIMEFRAMES } from "./chart.js";
+import {
+  SEL, encodeGetPool, rpcBatch, word, addressFromWord,
+  poolPrice, poolDepth, aggregate, assess, derive, rentAnnual, deriveMark, BPS,
+} from "./engine.js";
+
+const RPC = "https://rpc.mainnet.chain.robinhood.com";
+const FACTORY = "0x1f7d7550b1b028f7571e69a784071f0205fd2efa";
+const WETH = "0x0Bd7D308f8E1639FAb988df18A8011f41EAcAD73";
+const USDG = "0x5fc5360D0400a0Fd4f2af552ADD042D716F1d168";
+const FEES = [100, 500, 3000, 10000];
+const HAIRCUT_BPS = 3000;
+const BAND_BPS = 50;
+const EVERY = 2000;
+const STALE_AFTER = 12000;   /* mark the price stale rather than let it lie */
+/* History only exists while the page is open, so this is a memory bound, not
+ * a retention policy: 5,000 samples at ~2s is a bit under three hours, which
+ * is more than the 15m timeframe needs to look like a chart. */
+const MAX = 5000;
+
+const $ = (id) => document.getElementById(id);
+const ticks = [];
+let pools = [];
+let lastPrice = null;
+
+const money = (v, dp = 2) =>
+  !isFinite(v) ? "—" : v.toLocaleString("en-US", { minimumFractionDigits: dp, maximumFractionDigits: dp });
+const usd = (v) => !isFinite(v) || v <= 0 ? "—"
+  : v >= 1e6 ? "$" + (v / 1e6).toFixed(2) + "M"
+  : v >= 1e3 ? "$" + Math.round(v / 1e3) + "k" : "$" + Math.round(v);
+
+function setConn(on, text) {
+  $("dot").className = "dot" + (on ? " on" : " off");
+  $("connText").textContent = text;
+}
+
+/* Age ticks on its own clock, once a second, independent of polling.
+ *
+ * Without it a stalled feed is invisible: the last price stays on screen
+ * looking current, which is worse than showing nothing. With it, a price that
+ * has stopped moving is obviously a price that has stopped arriving. */
+let lastOk = 0;
+function paintAge() {
+  if (!lastOk) { $("age").textContent = ""; return; }
+  const secs = Math.floor((Date.now() - lastOk) / 1000);
+  $("age").textContent = secs < 1 ? "now" : secs + "s ago";
+  const stale = Date.now() - lastOk > STALE_AFTER;
+  $("age").style.color = stale ? "var(--down)" : "var(--text-3)";
+  $("last").style.opacity = stale ? "0.45" : "1";
+}
+setInterval(paintAge, 1000);
+
+/* ---- discovery: which pools exist, and what decimals they use ----------- */
+
+async function discover() {
+  const calls = FEES.map((fee) => ({ to: FACTORY, data: encodeGetPool(WETH, USDG, fee) }));
+  calls.push({ to: WETH, data: SEL.decimals }, { to: USDG, data: SEL.decimals });
+  const res = await rpcBatch(RPC, calls);
+
+  const baseDec = Number(word(res[FEES.length] || "0x", 0));
+  const quoteDec = Number(word(res[FEES.length + 1] || "0x", 0));
+
+  const found = [];
+  for (let i = 0; i < FEES.length; i++) {
+    if (!res[i]) continue;
+    const addr = addressFromWord(res[i], 0);
+    if (/^0x0+$/.test(addr)) continue;
+    found.push({ fee: FEES[i], address: addr, name: "uniswap-" + FEES[i] });
+  }
+  if (found.length === 0) throw new Error("no pools");
+
+  // token0 decides orientation, and it is whichever address sorts lower.
+  const t0 = await rpcBatch(RPC, found.map((p) => ({ to: p.address, data: SEL.token0 })));
+  found.forEach((p, i) => {
+    const tok0 = t0[i] ? addressFromWord(t0[i], 0) : "";
+    p.quoteIsToken0 = tok0.toLowerCase() === USDG.toLowerCase();
+    p.dec0 = p.quoteIsToken0 ? quoteDec : baseDec;
+    p.dec1 = p.quoteIsToken0 ? baseDec : quoteDec;
+    p.quoteDec = quoteDec;
+  });
+  return found;
+}
+
+/* ---- one tick: every pool read in a single batched request -------------- */
+
+async function tick() {
+  const started = performance.now();
+  const calls = [];
+  for (const p of pools) {
+    calls.push({ to: p.address, data: SEL.slot0 });
+    calls.push({ to: p.address, data: SEL.liquidity });
+  }
+  const res = await rpcBatch(RPC, calls);
+
+  const sources = [];
+  const failed = [];
+  pools.forEach((p, i) => {
+    const slot0 = res[i * 2], liq = res[i * 2 + 1];
+    if (!slot0 || !liq) { failed.push(p.name); return; }
+    const sqrtP = word(slot0, 0);
+    const L = word(liq, 0);
+    const price = poolPrice(sqrtP, p.dec0, p.dec1, p.quoteIsToken0);
+    const depth = poolDepth(L, sqrtP, p.quoteDec, HAIRCUT_BPS, p.quoteIsToken0);
+    if (!(price > 0) || !(depth > 0)) { failed.push(p.name); return; }
+    sources.push({ name: p.name, price, liquidity: depth });
+  });
+  if (sources.length === 0) throw new Error("no venue answered");
+
+  const agg = aggregate(sources);
+  const deepest = sources.reduce((a, b) => (b.liquidity > a.liquidity ? b : a), sources[0]);
+  const mark = deriveMark(agg.price, deepest.price, BAND_BPS);
+  const depthTotal = sources.reduce((t, s) => t + s.liquidity, 0);
+
+  // Facts a pool cannot answer, stated rather than assumed. WETH is mature and
+  // widely held; volume is estimated from depth so the gate is not the subject
+  // of the demo.
+  const obs = {
+    depth: depthTotal,
+    tvl: depthTotal * 5,
+    volume24h: depthTotal * 12,
+    confidence: agg.confidence,
+    ageHours: 400 * 24,
+    underwritten: 250_000,
+    topHolderBps: 900,
+    topPoolBps: Math.round((deepest.liquidity / depthTotal) * BPS),
+    volBps: 7_500,
+  };
+  const score = assess(obs);
+  const cap = derive(obs, score);
+
+  return {
+    at: new Date(), index: agg.price, mark, agg, sources, failed,
+    depthTotal, score, cap, latency: Math.round(performance.now() - started),
+  };
+}
+
+/* ---- rendering ---------------------------------------------------------- */
+
+function paint(t) {
+  const el = $("last");
+  el.textContent = money(t.index);
+  if (lastPrice !== null && t.index !== lastPrice) {
+    const up = t.index > lastPrice;
+    el.classList.toggle("up", up);
+    el.classList.toggle("down", !up);
+    $("arrow").textContent = up ? "▲" : "▼";
+    $("arrow").style.color = up ? "var(--up)" : "var(--down)";
+  }
+  lastPrice = t.index;
+
+  $("index").textContent = money(t.index, 4);
+  $("mark").textContent = money(t.mark, 4);
+  $("conf").textContent = t.agg.confidence.toLocaleString();
+  $("srcs").textContent = t.agg.used.length + " of " + (t.sources.length + t.failed.length);
+  $("ticks").textContent = ticks.length;
+  $("lat").textContent = t.latency;
+  $("stamp").textContent = t.at.toISOString().replace("T", " ").replace(/\..*/, " UTC");
+
+  $("score").textContent = t.score.total.toLocaleString();
+  $("scoreSub").textContent = t.score.eligible
+    ? "lists above 5,500" : t.score.gates[0];
+  $("lev").textContent = t.cap ? t.cap.leverage + "×" : "no market";
+  $("levSub").textContent = t.cap ? "granted by the engine" : "below the listing bar";
+  $("cap").textContent = t.cap ? usd(t.cap.oiCap) : "—";
+  $("depth").textContent = usd(t.depthTotal);
+  $("maint").textContent = t.cap ? (t.cap.maintenanceBps / 100).toFixed(2) + "%" : "—";
+
+  $("rentScale").innerHTML = [0, 0.25, 0.5, 0.8, 0.95].map((u) =>
+    '<div><span class="u">' + Math.round(u * 100) + '%</span>' +
+    '<span class="r">' + (rentAnnual(u) * 100).toFixed(u >= 0.8 ? 0 : 1) + '%</span></div>'
+  ).join("");
+
+  const max = Math.max(...t.sources.map((s) => s.liquidity), 1);
+  const used = new Set(t.agg.used);
+  $("venues").innerHTML = t.sources.map((s) =>
+    '<div class="venue' + (used.has(s.name) ? "" : " out") + '">' +
+      '<span class="n">' + s.name + "</span>" +
+      '<span class="p num">' + money(s.price, 4) + "</span>" +
+      '<span class="d num">' + usd(s.liquidity) + "</span>" +
+      '<span class="vbar"><i style="width:' + ((s.liquidity / max) * 100).toFixed(1) + '%"></i></span>' +
+    "</div>"
+  ).join("") + t.failed.map((n) =>
+    '<div class="venue out"><span class="n">' + n + '</span><span class="p">unreachable</span></div>'
+  ).join("");
+  $("vnote").textContent = t.failed.length ? t.failed.length + " unreachable" : "pools";
+
+  const tape = $("tape");
+  const prev = ticks.length > 1 ? ticks[ticks.length - 2].index : null;
+  const dir = prev === null ? "" : t.index > prev ? "up" : t.index < prev ? "down" : "";
+  const row = document.createElement("div");
+  row.className = "trow";
+  row.innerHTML =
+    '<span class="t num">' + t.at.toISOString().slice(11, 19) + "</span>" +
+    '<span class="p num ' + dir + '">' + money(t.index, 4) + "</span>" +
+    '<span class="c num">' + t.agg.confidence + "</span>";
+  tape.insertBefore(row, tape.firstChild);
+  while (tape.childElementCount > 60) tape.removeChild(tape.lastChild);
+}
+
+/* ---- chart -------------------------------------------------------------- */
+
+const chart = new Chart($("chart"), {
+  bandBps: BAND_BPS,
+  fmt: (v) => money(v),
+  fmtDepth: (v) => usd(v),
+  onView: ({ following }) => $("live").classList.toggle("hide", following),
+  onHover: (h) => {
+    if (!h) { paintOHLC(null); return; }
+    paintOHLC(h.candle);
+  },
+});
+
+/* The readout is the chart's own legend: with a crosshair on the page, a
+ * static legend just repeats what the axis already says. */
+function paintOHLC(c) {
+  const el = $("ohlc");
+  if (!c) { el.innerHTML = ""; return; }
+  const cls = c.c >= c.o ? "u" : "d";
+  const f = (v) => money(v);
+  el.innerHTML =
+    `<span>O <b>${f(c.o)}</b></span><span>H <b>${f(c.h)}</b></span>` +
+    `<span>L <b>${f(c.l)}</b></span><span>C <b class="${cls}">${f(c.c)}</b></span>` +
+    `<span>· ${c.n} tick${c.n === 1 ? "" : "s"}</span>`;
+}
+
+/* Timeframe buttons. 5s is the finest that means anything: the poll is ~2s, so
+ * anything shorter is one sample per candle wearing a candle's costume. */
+const tfBar = $("tfs");
+TIMEFRAMES.forEach((tf, i) => {
+  const b = document.createElement("button");
+  b.textContent = tf.label;
+  b.dataset.ms = tf.ms;
+  if (i === 0) b.className = "on";
+  b.onclick = () => {
+    [...tfBar.children].forEach((x) => x.classList.remove("on"));
+    b.classList.add("on");
+    chart.setTimeframe(tf.ms);
+  };
+  tfBar.appendChild(b);
+});
+
+$("types").onclick = (e) => {
+  const b = e.target.closest("button"); if (!b) return;
+  [...$("types").children].forEach((x) => x.classList.remove("on"));
+  b.classList.add("on");
+  chart.setType(b.dataset.type);
+};
+
+const toggle = (id, fn) => {
+  const b = $(id);
+  b.onclick = () => { const on = b.classList.toggle("on"); fn(on); };
+};
+toggle("tBand", (v) => chart.setBand(v));
+toggle("tMark", (v) => chart.setMark(v));
+toggle("tDepth", (v) => chart.setDepth(v));
+$("live").onclick = () => chart.goLive();
+
+function draw() {
+  chart.setTicks(ticks);
+}
+
+/* ---- loop --------------------------------------------------------------- */
+
+let misses = 0;
+let polling = false;
+let timer = null;
+
+/* One poll at a time. A tick that runs long must not have another start behind
+   it: overlapping polls would interleave and could paint an older reading over
+   a newer one. */
+async function poll() {
+  if (polling) return;
+  polling = true;
+  try {
+    const t = await tick();
+    t.t = t.at.getTime();
+    t.depth = t.depthTotal;
+    t.conf = t.agg.confidence;
+    ticks.push(t);
+    if (ticks.length > MAX) ticks.shift();
+    paint(t);
+    draw();
+    lastOk = Date.now();
+    paintAge();
+    misses = 0;
+    setConn(true, "live · " + pools.length + " pools");
+  } catch (err) {
+    misses++;
+    // A single failed poll is not an outage; the next usually succeeds. The
+    // age counter keeps telling the truth in the meantime.
+    setConn(false, misses > 2 ? "rpc unreachable" : "retrying…");
+  } finally {
+    polling = false;
+  }
+}
+
+function schedule() {
+  clearTimeout(timer);
+  // Back off after repeated failures rather than hammering an endpoint that is
+  // rate-limiting us, which is the usual reason it is failing.
+  const wait = misses > 2 ? Math.min(EVERY * misses, 15000) : EVERY;
+  timer = setTimeout(run, wait);
+}
+
+async function run() {
+  await poll();
+  schedule();
+}
+
+/* Background tabs get their timers throttled or suspended entirely, so a tab
+   returning to the foreground reads immediately rather than showing whatever
+   was on screen when it was hidden. */
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "visible") { clearTimeout(timer); run(); }
+});
+
+(async function start() {
+  for (let attempt = 0; ; attempt++) {
+    try {
+      pools = await discover();
+      break;
+    } catch (err) {
+      setConn(false, "discovering pools…");
+      $("venues").innerHTML =
+        '<div class="lbl">no pools yet — retrying (' + (attempt + 1) + ')</div>';
+      await new Promise((r) => setTimeout(r, Math.min(2000 * (attempt + 1), 10000)));
+    }
+  }
+  setConn(true, "live · " + pools.length + " pools");
+  run();
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,434 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Levu — Elastic Perps</title>
+<meta name="description" content="Perpetual futures markets that appear, scale and retire with measured conditions. Built on Robinhood Chain.">
+<link rel="icon" href="/logo.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans+Condensed:wght@600;700&family=IBM+Plex+Sans:wght@400;500&display=swap">
+<style>
+:root{
+  /* One visual world, deliberately. The mark is neon on black, and a light
+     variant would be the same page with its identity removed -- so there is
+     no light variant, and every colour below is stated rather than inherited
+     from whatever ground the browser paints. */
+  color-scheme:dark;
+  --paper:#05070A;--surface:#0B0F14;--surface-2:#121821;
+  --rule:#1E2632;--rule-soft:#161D27;
+  --text:#EAF2EE;--text-2:#9BAAA5;--text-3:#6B7A77;
+  --ember:#00E58C;--ember-soft:#06251A;
+  --up:#00E58C;--down:#FF6B5A;--grid:#141B24;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--paper);color:var(--text);
+  font-family:"IBM Plex Sans",system-ui,sans-serif;font-size:15.5px;line-height:1.62;
+  -webkit-font-smoothing:antialiased}
+.num{font-family:"IBM Plex Mono",ui-monospace,monospace;font-variant-numeric:tabular-nums}
+.lbl{font-family:"IBM Plex Mono",monospace;font-size:9.5px;letter-spacing:.15em;
+  text-transform:uppercase;color:var(--text-3)}
+.wrap{max-width:980px;margin:0 auto;padding:0 24px}
+a{color:var(--ember)}
+a:focus-visible,button:focus-visible{outline:2px solid var(--ember);outline-offset:2px}
+
+nav{border-bottom:1px solid var(--rule);background:var(--surface);position:sticky;top:0;z-index:5}
+nav .wrap{display:flex;align-items:center;gap:18px;padding-top:12px;padding-bottom:12px}
+.mark{display:flex;align-items:center;gap:9px;font-family:"IBM Plex Sans Condensed",sans-serif;
+  font-weight:700;font-size:19px;letter-spacing:-.01em;color:var(--text);text-decoration:none}
+.mark .navmark{height:26px;width:auto;display:block;color:var(--text)}
+.mark .word{line-height:1}
+.mark .dot{color:var(--ember)}
+.hero-mark{height:64px;width:auto;display:block;margin-bottom:22px;color:var(--text)}
+@media(max-width:860px){.hero-mark{height:52px}}
+nav .spacer{margin-left:auto}
+nav a{font-size:13px;text-decoration:none;color:var(--text-2)}
+nav a:hover{color:var(--ember)}
+.cta{display:inline-block;padding:6px 13px;border-radius:3px;background:var(--ember);
+  color:var(--paper)!important;font-weight:500;font-size:13px;text-decoration:none}
+
+header.hero{padding:76px 0 58px;border-bottom:1px solid var(--rule)}
+.hero-grid{display:grid;grid-template-columns:minmax(0,1.15fr) minmax(0,.85fr);
+  gap:44px;align-items:center}
+@media(max-width:860px){.hero-grid{grid-template-columns:1fr;gap:32px}}
+.live{background:var(--surface);border:1px solid var(--rule);border-radius:5px;overflow:hidden}
+.live .top{display:flex;align-items:baseline;gap:10px;padding:15px 17px 8px}
+.live .sym{font-family:"IBM Plex Sans Condensed",sans-serif;font-weight:700;font-size:15px}
+.live .st{margin-left:auto;display:flex;align-items:center;gap:6px;font-size:10.5px;color:var(--text-3)}
+.live .dot{width:6px;height:6px;border-radius:50%;background:var(--text-3)}
+.live .dot.on{background:var(--up)}
+.live .px{padding:0 17px;font-family:"IBM Plex Mono",monospace;font-size:33px;
+  font-weight:500;letter-spacing:-.02em;font-variant-numeric:tabular-nums;line-height:1.15}
+.live .px.up{color:var(--up)}.live .px.down{color:var(--down)}
+.live canvas{display:block;width:100%;height:78px;margin-top:6px}
+.live .foot{display:grid;grid-template-columns:1fr 1fr 1fr;border-top:1px solid var(--rule-soft)}
+.live .foot div{padding:10px 14px;border-right:1px solid var(--rule-soft)}
+.live .foot div:last-child{border-right:none}
+.live .foot .v{font-family:"IBM Plex Mono",monospace;font-size:14px;font-weight:500;
+  font-variant-numeric:tabular-nums}
+.live .cap{padding:9px 17px;font-size:11px;color:var(--text-3);
+  border-top:1px solid var(--rule-soft);background:var(--surface-2)}
+h1{font-family:"IBM Plex Sans Condensed",sans-serif;font-weight:700;
+  font-size:clamp(34px,5.4vw,58px);line-height:1.06;letter-spacing:-.022em;
+  margin:0 0 20px;text-wrap:balance;max-width:17ch}
+h1 em{font-style:normal;color:var(--ember)}
+.lede{font-size:18.5px;color:var(--text-2);max-width:60ch;margin:0 0 28px}
+.hero-actions{display:flex;gap:12px;flex-wrap:wrap;align-items:center}
+.ghost{display:inline-block;padding:6px 13px;border-radius:3px;border:1px solid var(--rule);
+  color:var(--text-2);font-size:13px;text-decoration:none;background:var(--surface)}
+.ghost:hover{border-color:var(--ember);color:var(--ember)}
+
+section{padding:54px 0;border-bottom:1px solid var(--rule-soft)}
+h2{font-family:"IBM Plex Sans Condensed",sans-serif;font-weight:700;font-size:25px;
+  letter-spacing:-.012em;margin:0 0 6px}
+.sub{color:var(--text-3);font-size:14px;margin:0 0 26px}
+p{max-width:66ch}
+.cols{display:grid;grid-template-columns:repeat(auto-fit,minmax(232px,1fr));gap:22px;margin-top:26px}
+.card{background:var(--surface);border:1px solid var(--rule);border-radius:4px;padding:18px}
+.card h3{margin:0 0 6px;font-size:15px;font-weight:600}
+.card p{margin:0;font-size:13.5px;color:var(--text-2);line-height:1.55}
+
+.ladder{display:flex;flex-wrap:wrap;gap:0;margin-top:26px;border:1px solid var(--rule);
+  border-radius:4px;overflow:hidden;background:var(--surface)}
+.rung{flex:1;min-width:118px;padding:14px 15px;border-right:1px solid var(--rule-soft)}
+.rung:last-child{border-right:none}
+.rung .n{font-family:"IBM Plex Mono",monospace;font-size:19px;font-weight:600;color:var(--ember)}
+.rung .s{font-size:11.5px;color:var(--text-3);display:block;margin-top:2px}
+.rung.off .n{color:var(--text-3)}
+
+table{width:100%;border-collapse:collapse;margin-top:22px;font-size:13.5px}
+th{text-align:left;font-family:"IBM Plex Mono",monospace;font-size:9.5px;letter-spacing:.14em;
+  text-transform:uppercase;color:var(--text-3);font-weight:400;
+  padding:0 12px 8px 0;border-bottom:1px solid var(--rule)}
+td{padding:9px 12px 9px 0;border-bottom:1px solid var(--rule-soft);vertical-align:top}
+td.n{font-family:"IBM Plex Mono",monospace;font-variant-numeric:tabular-nums;white-space:nowrap}
+td.n.big{font-size:15px;font-weight:500;color:var(--ember)}
+
+.note{background:var(--surface-2);border-left:2px solid var(--ember);padding:14px 17px;
+  margin-top:24px;font-size:14px;color:var(--text-2);border-radius:0 3px 3px 0}
+.note b{color:var(--text)}
+
+.stack{display:grid;grid-template-columns:repeat(auto-fit,minmax(168px,1fr));gap:1px;
+  background:var(--rule);border:1px solid var(--rule);border-radius:4px;overflow:hidden;margin-top:26px}
+.stack div{background:var(--surface);padding:15px 16px}
+.stack .k{font-family:"IBM Plex Mono",monospace;font-size:11px;color:var(--ember);
+  letter-spacing:.06em;text-transform:uppercase}
+.stack .t{font-size:22px;font-weight:600;font-family:"IBM Plex Mono",monospace;margin:3px 0 2px}
+.stack .d{font-size:12.5px;color:var(--text-3);line-height:1.45}
+
+ul{padding-left:19px;max-width:66ch}
+li{margin-bottom:7px;color:var(--text-2)}
+li b{color:var(--text)}
+
+footer{padding:34px 0 54px;font-size:12.5px;color:var(--text-3)}
+footer a{color:var(--text-2)}
+@media(max-width:640px){header.hero{padding:50px 0 40px}section{padding:40px 0}}
+</style>
+</head>
+<body>
+
+<nav><div class="wrap">
+  <a class="mark" href="/">
+<svg class="navmark" viewBox="0 0 240 320" aria-hidden="true">
+      <path fill="currentColor" fill-rule="evenodd"
+            d="M118 6 L118 314 L26 178 C6 150 6 138 26 112 Z
+               M118 6 C112 92 92 140 44 159 C92 178 112 226 118 314 Z"/>
+      <path fill="#00E58C" fill-rule="evenodd"
+            d="M122 6 L122 314 L214 178 C234 150 234 138 214 112 Z
+               M122 6 C128 92 148 140 196 159 C148 178 128 226 122 314 Z"/>
+    </svg><span class="word">levu<span class="dot">.</span></span>
+  </a>
+  <span class="spacer"></span>
+  <a href="#how">What's different</a>
+  <a href="#evidence">Why you can leave</a>
+  <a class="lnk" href="/terminal">Live terminal</a>
+  <a class="cta" href="/trade">Paper trade →</a>
+</div></nav>
+
+<header class="hero"><div class="wrap"><div class="hero-grid">
+  <div>
+    <svg class="hero-mark" viewBox="0 0 240 320" aria-hidden="true">
+      <path fill="currentColor" fill-rule="evenodd"
+            d="M118 6 L118 314 L26 178 C6 150 6 138 26 112 Z
+               M118 6 C112 92 92 140 44 159 C92 178 112 226 118 314 Z"/>
+      <path fill="#00E58C" fill-rule="evenodd"
+            d="M122 6 L122 314 L214 178 C234 150 234 138 214 112 Z
+               M122 6 C128 92 148 140 196 159 C148 178 128 226 122 314 Z"/>
+    </svg>
+    <h1>Perp markets that <em>appear</em>, scale, and retire on their own.</h1>
+    <p class="lede">
+      Trade perps on tokens no exchange has got around to listing. Markets open when
+      there is enough liquidity to support them, leverage moves with the book while
+      you hold, and a fading market steps down instead of shutting on you.
+    </p>
+    <div class="hero-actions">
+      <a class="cta" href="/trade">Paper trade 57 markets</a>
+      <a class="ghost" href="/terminal">Live terminal</a>
+    </div>
+  </div>
+
+  <!-- Not a mockup. The index below is aggregated in this page, from Uniswap
+       pools on Robinhood Chain, by the same weighting the engine uses. -->
+  <div class="live" id="live">
+    <div class="top">
+      <span class="sym">WETH / USDG</span>
+      <span class="st"><span class="dot" id="hdot"></span><span id="hstate">connecting</span></span>
+    </div>
+    <div class="px num" id="hpx">—</div>
+    <canvas id="hspark" width="600" height="156"></canvas>
+    <div class="foot">
+      <div><span class="lbl">Confidence</span><div class="v" id="hconf">—</div></div>
+      <div><span class="lbl">Sources</span><div class="v" id="hsrc">—</div></div>
+      <div><span class="lbl">Depth ±2%</span><div class="v" id="hdepth">—</div></div>
+    </div>
+    <div class="cap">Read from chain in your browser. No server, no backend, no cache.</div>
+  </div>
+</div></div></header>
+
+<section id="how"><div class="wrap">
+  <h2>Perps on tokens nobody else will list</h2>
+  <p class="sub">The three things that are different, from where you sit.</p>
+
+  <div class="cols">
+    <div class="card">
+      <h3>The long tail actually has markets</h3>
+      <p>Most tokens never get a perp anywhere, because listing one is a decision
+         a committee makes over weeks. Here it happens when the market can support
+         it — spot first, leverage once there is a book to lend against.</p>
+    </div>
+    <div class="card">
+      <h3>Leverage scales with the book</h3>
+      <p>Not a tier somebody picked. A deep market carries tens of times, a thin
+         one single digits, and it moves while you hold — so you are never
+         quietly over-levered on a market that got worse overnight.</p>
+    </div>
+    <div class="card">
+      <h3>A dying market doesn't dump you</h3>
+      <p>When liquidity fades, leverage comes off first and the market keeps
+         trading at 1×. You get time to leave. Nobody force-closes the whole book
+         into an empty one.</p>
+    </div>
+  </div>
+</div></section>
+
+<section><div class="wrap">
+  <h2>Leverage comes from the book, not a tier</h2>
+  <p class="sub">No fixed number per market. What you can borrow is what the market can absorb.</p>
+  <div class="ladder">
+    <div class="rung off"><span class="n">1×</span><span class="s">under $250k book<br>spot only</span></div>
+    <div class="rung"><span class="n">10×</span><span class="s">$250k book</span></div>
+    <div class="rung"><span class="n">20×</span><span class="s">$500k book</span></div>
+    <div class="rung"><span class="n">33×</span><span class="s">$2M and above</span></div>
+  </div>
+  <p style="margin-top:24px">
+    Most exchanges pick a number per market and defend it. Here it is a
+    consequence: what it would cost to close the largest position the market
+    allows. A deep book is cheap to close, so it carries more. A thin one is not.
+    And it moves while you hold, without anyone republishing a tier list.
+  </p>
+  <p>
+    <b>Under $250k of resting depth there is no leverage at all.</b> Not reduced
+    leverage — none. A book that small cannot absorb a liquidation, and offering
+    to lend against it would be offering a position nobody can close. The market
+    still trades, at full collateral, until somebody quotes it properly.
+  </p>
+  <p>
+    For the same reason no single position may exceed a quarter of the book it
+    would be closed in, however much capital is backing the market. Capital
+    absorbs a loss; it does not fill an order.
+  </p>
+  <p>
+    <b>And the number is yours, not the market's.</b> The figure above is what a
+    small position gets. Ask for a size that is large against the book and the
+    leverage comes down with it — 33× at a thousand dollars, 24× at a million in
+    the same market — because closing your position is what your margin is
+    paying for. The ticket shows what <em>you</em> get before you commit to it,
+    rather than quoting a headline and filling you at something else.
+  </p>
+  <p>
+    <b>33× is where our fees put the ceiling today, not where the engine stops.</b>
+    Liquidation has to leave an account solvent on the fee alone, so the fee sets
+    a floor under margin and a roof over leverage. Cut the fee and the roof
+    rises — to 100× at a fee of zero, which is where the risk engine itself stops.
+    We would rather quote the number we can actually honour.
+  </p>
+  <p>
+    The bottom of the ladder matters as much as the top. A market that has gone
+    quiet drops to <b>1×</b> and stays open at full collateral, instead of being
+    closed on you. That is the difference between choosing when to exit and
+    finding out you already have.
+  </p>
+</div></section>
+
+<section id="evidence"><div class="wrap">
+  <h2>Why you can leave</h2>
+  <p class="sub">The part worth checking before you fund anything.</p>
+  <ul>
+    <li><b>Your collateral sits in a contract, not with us.</b> We move positions,
+        not balances.</li>
+    <li><b>You can withdraw without our help.</b> Every position is committed on
+        chain with a proof you can use yourself. If we vanish, you still get paid —
+        that path is built and tested, not a promise.</li>
+    <li><b>Liquidation size is capped by what can actually be sold.</b> Exposure is
+        limited to what the book can absorb, and no single account may be more
+        than a tenth of a market — so a liquidation is not a hole somebody else
+        pays for.</li>
+    <li><b>The price is checked in your browser.</b> The number in the hero is not
+        our API. It is read from the chain by this page, and the terminal shows
+        every source behind it.</li>
+  </ul>
+  <div class="note">
+    <b>Fair warning.</b> These markets are new and the thresholds behind them are
+    judgement so far, not history. Leverage is capped low on purpose while that is
+    true. Small tokens move violently and 1× can still hurt.
+  </div>
+</div></section>
+<footer><div class="wrap">
+  Prices on the terminal are read live from Uniswap pools on Robinhood Chain,
+  straight from your browser. No positions exist in these markets.
+  <br><a href="/trade">Paper trading</a> · <a href="/terminal">Live terminal</a>
+</div></footer>
+
+<script type="module">
+/* The hero's price is the product's own claim, made in public. It runs the same
+   aggregation the engine uses -- liquidity-weighted median across the fee tiers,
+   with the same deviation guard -- against the same pools, in the browser. If it
+   is wrong here it is wrong everywhere. */
+import { SEL, encodeGetPool, rpcBatch, word, addressFromWord,
+         poolPrice, poolDepth, aggregate } from "./engine.js";
+
+const RPC = "https://rpc.mainnet.chain.robinhood.com";
+const FACTORY = "0x1f7d7550b1b028f7571e69a784071f0205fd2efa";
+const WETH = "0x0Bd7D308f8E1639FAb988df18A8011f41EAcAD73";
+const USDG = "0x5fc5360D0400a0Fd4f2af552ADD042D716F1d168";
+const FEES = [100, 500, 3000, 10000];
+const $ = (id) => document.getElementById(id);
+const money = (v, dp = 2) => !isFinite(v) ? "—"
+  : v.toLocaleString("en-US", { minimumFractionDigits: dp, maximumFractionDigits: dp });
+const usd = (v) => !isFinite(v) || v <= 0 ? "—"
+  : v >= 1e6 ? "$" + (v / 1e6).toFixed(1) + "M" : "$" + Math.round(v / 1e3) + "k";
+
+let pools = [], ticks = [], last = null, misses = 0;
+
+async function discover() {
+  const calls = FEES.map((f) => ({ to: FACTORY, data: encodeGetPool(WETH, USDG, f) }));
+  calls.push({ to: WETH, data: SEL.decimals }, { to: USDG, data: SEL.decimals });
+  const res = await rpcBatch(RPC, calls);
+  const baseDec = Number(word(res[FEES.length] || "0x", 0));
+  const quoteDec = Number(word(res[FEES.length + 1] || "0x", 0));
+  const found = [];
+  for (let i = 0; i < FEES.length; i++) {
+    if (!res[i]) continue;
+    const addr = addressFromWord(res[i], 0);
+    if (/^0x0+$/.test(addr)) continue;
+    found.push({ fee: FEES[i], address: addr, name: "uniswap-" + FEES[i] });
+  }
+  if (!found.length) throw new Error("no pools");
+  const t0 = await rpcBatch(RPC, found.map((p) => ({ to: p.address, data: SEL.token0 })));
+  found.forEach((p, i) => {
+    const tok0 = t0[i] ? addressFromWord(t0[i], 0) : "";
+    p.quoteIsToken0 = tok0.toLowerCase() === USDG.toLowerCase();
+    p.dec0 = p.quoteIsToken0 ? quoteDec : baseDec;
+    p.dec1 = p.quoteIsToken0 ? baseDec : quoteDec;
+    p.quoteDec = quoteDec;
+  });
+  return found;
+}
+
+async function tick() {
+  const calls = [];
+  for (const p of pools) {
+    calls.push({ to: p.address, data: SEL.slot0 }, { to: p.address, data: SEL.liquidity });
+  }
+  const res = await rpcBatch(RPC, calls);
+  const sources = [];
+  pools.forEach((p, i) => {
+    const s0 = res[i * 2], lq = res[i * 2 + 1];
+    if (!s0 || !lq) return;
+    const sq = word(s0, 0), L = word(lq, 0);
+    const price = poolPrice(sq, p.dec0, p.dec1, p.quoteIsToken0);
+    const depth = poolDepth(L, sq, p.quoteDec, 3000);
+    if (price > 0 && depth > 0) sources.push({ name: p.name, price, liquidity: depth });
+  });
+  if (!sources.length) throw new Error("no venue answered");
+  const agg = aggregate(sources);
+  const depth = sources.reduce((t, s) => t + s.liquidity, 0);
+  return { index: agg.price, conf: agg.confidence, used: agg.used.length,
+           total: sources.length, depth };
+}
+
+function paint(t) {
+  const el = $("hpx");
+  el.textContent = money(t.index, 2);
+  if (last !== null && t.index !== last) {
+    const up = t.index > last;
+    el.classList.toggle("up", up); el.classList.toggle("down", !up);
+  }
+  last = t.index;
+  $("hconf").textContent = t.conf.toLocaleString();
+  $("hsrc").textContent = t.used + " of " + t.total;
+  $("hdepth").textContent = usd(t.depth);
+  $("hdot").className = "dot on";
+  $("hstate").textContent = "live";
+  ticks.push(t.index);
+  if (ticks.length > 120) ticks.shift();
+  spark();
+}
+
+function spark() {
+  const cv = $("hspark"), ctx = cv.getContext("2d");
+  const d = Math.min(devicePixelRatio || 1, 2);
+  const W = cv.clientWidth, H = cv.clientHeight;
+  if (cv.width !== Math.round(W * d)) { cv.width = W * d; cv.height = H * d; }
+  ctx.setTransform(d, 0, 0, d, 0, 0);
+  ctx.clearRect(0, 0, W, H);
+  if (ticks.length < 2) return;
+  const cs = getComputedStyle(document.documentElement);
+  let lo = Math.min(...ticks), hi = Math.max(...ticks);
+  const mid = (lo + hi) / 2, floor = mid * 0.0006;
+  if (hi - lo < floor) { lo = mid - floor / 2; hi = mid + floor / 2; }
+  const pad = (hi - lo) * 0.3; lo -= pad; hi += pad;
+  const X = (i) => (i / (ticks.length - 1)) * W;
+  const Y = (v) => H - ((v - lo) / (hi - lo)) * H;
+  ctx.beginPath();
+  ticks.forEach((p, i) => { const y = Y(p); i ? ctx.lineTo(X(i), y) : ctx.moveTo(X(i), y); });
+  ctx.lineTo(W, H); ctx.lineTo(0, H); ctx.closePath();
+  ctx.fillStyle = cs.getPropertyValue("--ember").trim(); ctx.globalAlpha = .10; ctx.fill();
+  ctx.globalAlpha = 1; ctx.beginPath();
+  ticks.forEach((p, i) => { const y = Y(p); i ? ctx.lineTo(X(i), y) : ctx.moveTo(X(i), y); });
+  ctx.strokeStyle = cs.getPropertyValue("--ember").trim();
+  ctx.lineWidth = 1.6; ctx.lineJoin = "round"; ctx.stroke();
+}
+addEventListener("resize", spark);
+
+/* A failure says so rather than leaving the last price on screen looking
+   current, which is the worst state a price display can be in. */
+async function loop() {
+  try {
+    paint(await tick());
+    misses = 0;
+  } catch (e) {
+    misses++;
+    if (misses > 2) {
+      $("hdot").className = "dot";
+      $("hstate").textContent = "chain unreachable";
+    }
+  }
+  setTimeout(loop, misses > 2 ? Math.min(3000 * misses, 20000) : 3000);
+}
+
+(async () => {
+  for (let i = 0; ; i++) {
+    try { pools = await discover(); break; }
+    catch { $("hstate").textContent = "finding pools…";
+            await new Promise((r) => setTimeout(r, Math.min(2000 * (i + 1), 8000))); }
+  }
+  loop();
+})();
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "visible") loop();
+});
+</script>
+</body>
+</html>

@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 320" role="img" aria-label="Levu">
+  <!-- Two mirrored blades meeting at a pinched waist. The left half carries the
+       page's foreground colour so the mark works on either theme; the right is
+       always the accent. -->
+  <path fill="currentColor"
+        d="M118 6 L118 314 L26 178 C6 150 6 138 26 112 Z
+           M118 6 C112 92 92 140 44 159 C92 178 112 226 118 314 Z" fill-rule="evenodd"/>
+  <path fill="#00E58C"
+        d="M122 6 L122 314 L214 178 C234 150 234 138 214 112 Z
+           M122 6 C128 92 148 140 196 159 C148 178 128 226 122 314 Z" fill-rule="evenodd"/>
+</svg>

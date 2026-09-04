@@ -1,0 +1,6 @@
+bin/
+contracts/out/
+contracts/cache/
+*.log
+.vercel
+node_modules/

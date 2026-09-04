@@ -1,0 +1,1012 @@
+<title>CASHCAT Lane Terminal</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans+Condensed:wght@600;700&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+
+<style>
+/* ---------------------------------------------------------------------------
+   Tokens. Full light palette on bare :root, redefined twice so the un-stamped
+   (system) state, an explicit light choice and an explicit dark choice all
+   resolve as complete sets.
+   --------------------------------------------------------------------------- */
+:root {
+  --paper:      #F4F5F7;
+  --surface:    #FFFFFF;
+  --surface-2:  #ECEEF1;
+  --rule:       #D6DAE0;
+  --rule-soft:  #E4E7EB;
+  --text:       #171B21;
+  --text-2:     #4A525D;
+  --text-3:     #6B7480;
+  --ember:      #B96A18;
+  --ember-soft: #F2E3D0;
+  --ok:         #3F7659;
+  --warn:       #A87A18;
+  --crit:       #A34733;
+  --grid:       #E1E4E9;
+  --shadow:     0 1px 2px rgba(20,23,28,.06), 0 8px 24px -12px rgba(20,23,28,.18);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --paper:      #14171C;
+    --surface:    #1B1F26;
+    --surface-2:  #232830;
+    --rule:       #333A45;
+    --rule-soft:  #272D36;
+    --text:       #E8EBEF;
+    --text-2:     #A3ACB8;
+    --text-3:     #7C8593;
+    --ember:      #E09242;
+    --ember-soft: #3A2A17;
+    --ok:         #6BAE87;
+    --warn:       #D9AC4A;
+    --crit:       #D2705A;
+    --grid:       #2A303A;
+    --shadow:     0 1px 2px rgba(0,0,0,.4), 0 10px 28px -14px rgba(0,0,0,.7);
+  }
+}
+:root[data-theme="dark"] {
+  --paper:      #14171C;
+  --surface:    #1B1F26;
+  --surface-2:  #232830;
+  --rule:       #333A45;
+  --rule-soft:  #272D36;
+  --text:       #E8EBEF;
+  --text-2:     #A3ACB8;
+  --text-3:     #7C8593;
+  --ember:      #E09242;
+  --ember-soft: #3A2A17;
+  --ok:         #6BAE87;
+  --warn:       #D9AC4A;
+  --crit:       #D2705A;
+  --grid:       #2A303A;
+  --shadow:     0 1px 2px rgba(0,0,0,.4), 0 10px 28px -14px rgba(0,0,0,.7);
+}
+
+* { box-sizing: border-box; }
+
+body {
+  background: var(--paper);
+  color: var(--text);
+  font-family: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  font-size: 15px;
+  line-height: 1.55;
+  margin: 0;
+  padding: 34px 24px 72px;
+  -webkit-font-smoothing: antialiased;
+}
+
+.wrap { max-width: 1080px; margin: 0 auto; }
+
+h1, h2, h3, .cond {
+  font-family: "IBM Plex Sans Condensed", "IBM Plex Sans", system-ui, sans-serif;
+  text-wrap: balance;
+  margin: 0;
+}
+.num {
+  font-family: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-variant-numeric: tabular-nums;
+}
+
+.eyebrow {
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  font-size: 10.5px;
+  letter-spacing: .14em;
+  text-transform: uppercase;
+  color: var(--text-3);
+}
+
+/* ---- masthead ---------------------------------------------------------- */
+
+.masthead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 20px 32px;
+  padding-bottom: 18px;
+  border-bottom: 2px solid var(--text);
+}
+.ticker { display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap; }
+.ticker h1 { font-size: 40px; font-weight: 700; letter-spacing: -.015em; line-height: 1; }
+.ticker .price { font-size: 26px; font-weight: 500; letter-spacing: -.01em; }
+.ticker .delta { font-size: 14px; font-weight: 500; color: var(--ok); }
+
+.masthead-meta {
+  display: flex;
+  gap: 26px;
+  flex-wrap: wrap;
+}
+.meta-item { display: flex; flex-direction: column; gap: 2px; }
+.meta-item .v { font-size: 14px; font-weight: 500; }
+
+.standfirst {
+  margin: 20px 0 0;
+  max-width: 62ch;
+  color: var(--text-2);
+  font-size: 15.5px;
+}
+.standfirst strong { color: var(--text); font-weight: 600; }
+
+/* ---- price ------------------------------------------------------------- */
+
+.pricecard {
+  margin-top: 34px;
+  border: 1px solid var(--rule);
+  border-radius: 3px;
+  background: var(--surface);
+  box-shadow: var(--shadow);
+  overflow: hidden;
+}
+.pricehead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px 24px;
+  padding: 15px 22px 12px;
+  border-bottom: 1px solid var(--rule-soft);
+}
+.pricehead h2 { font-size: 17px; font-weight: 600; }
+.pricehead .legend { display: flex; gap: 18px; flex-wrap: wrap; }
+.key { display: inline-flex; align-items: center; gap: 6px; font-size: 11.5px; color: var(--text-3); }
+.key i { width: 14px; height: 3px; border-radius: 1px; display: inline-block; }
+.key i.price { background: var(--ember); }
+.key i.depth { background: var(--text-3); }
+.key i.step { background: var(--ember-soft); border: 1px solid var(--ember); height: 9px; width: 9px; border-radius: 1px; }
+.pricebody { padding: 8px 14px 6px; overflow-x: auto; }
+.pricebody svg { min-width: 620px; }
+
+/* ---- the two lanes, as aligned instrument columns ---------------------- */
+
+.lanes {
+  margin-top: 40px;
+  display: grid;
+  grid-template-columns: 168px 1fr 1fr;
+  border: 1px solid var(--rule);
+  border-radius: 3px;
+  background: var(--surface);
+  box-shadow: var(--shadow);
+  overflow: hidden;
+}
+
+.lanes > * { padding: 13px 18px; border-bottom: 1px solid var(--rule-soft); }
+.lanes > .row-end { border-bottom: none; }
+
+.corner { background: var(--surface-2); }
+
+.lane-head {
+  background: var(--surface-2);
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  padding-top: 16px;
+  padding-bottom: 15px;
+}
+.lane-head .pair {
+  font-family: "IBM Plex Sans Condensed", sans-serif;
+  font-size: 21px;
+  font-weight: 700;
+  letter-spacing: -.008em;
+}
+.lane-head .quote { color: var(--text-3); font-weight: 600; }
+
+.state {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  align-self: flex-start;
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 10.5px;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  padding: 3px 9px 3px 7px;
+  border-radius: 2px;
+  border: 1px solid currentColor;
+}
+.state::before {
+  content: "";
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+}
+.state.live { color: var(--ok); }
+.state.expanding { color: var(--ember); }
+
+.rowlabel {
+  color: var(--text-2);
+  font-size: 13px;
+  display: flex;
+  align-items: center;
+  background: color-mix(in srgb, var(--surface-2) 45%, transparent);
+}
+
+.cell { display: flex; flex-direction: column; gap: 3px; justify-content: center; }
+.cell .big { font-size: 22px; font-weight: 500; letter-spacing: -.01em; }
+.cell .sub { font-size: 12.5px; color: var(--text-3); }
+.cell .sub b { color: var(--text-2); font-weight: 500; }
+
+.lev { display: flex; align-items: baseline; gap: 9px; }
+.lev .avail { font-size: 26px; font-weight: 500; }
+.lev .of { font-size: 13px; color: var(--text-3); }
+
+/* leverage ladder — which rungs this lane currently offers */
+.ladder { display: flex; gap: 4px; margin-top: 5px; }
+.rung {
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 11px;
+  padding: 2px 7px;
+  border: 1px solid var(--rule);
+  border-radius: 2px;
+  color: var(--text-3);
+}
+.rung.on { border-color: var(--ember); color: var(--ember); background: var(--ember-soft); font-weight: 500; }
+
+/* ---- score bar --------------------------------------------------------- */
+
+.scorewrap { display: flex; flex-direction: column; gap: 7px; }
+.scoretop { display: flex; align-items: baseline; gap: 8px; }
+.scoretop .n { font-size: 22px; font-weight: 500; }
+.scoretop .d { font-size: 12.5px; color: var(--text-3); }
+
+.subscores { display: grid; gap: 4px; }
+.sub-row { display: grid; grid-template-columns: 78px 1fr 38px; align-items: center; gap: 8px; }
+.sub-row .name { font-size: 11px; color: var(--text-3); }
+.sub-row .val { font-size: 11px; color: var(--text-2); text-align: right; }
+.track { height: 5px; background: var(--grid); border-radius: 1px; overflow: hidden; }
+.fill { height: 100%; background: var(--text-2); border-radius: 1px; }
+.fill.strong { background: var(--ember); }
+
+/* ---- capacity meter ---------------------------------------------------- */
+
+.capacity { display: flex; flex-direction: column; gap: 9px; }
+.capbar {
+  position: relative;
+  height: 26px;
+  background: var(--grid);
+  border-radius: 2px;
+  overflow: hidden;
+}
+.capfill {
+  height: 100%;
+  background: linear-gradient(90deg,
+    color-mix(in srgb, var(--ember) 45%, transparent),
+    var(--ember));
+  transition: width .8s cubic-bezier(.2,.8,.25,1);
+}
+.kink {
+  position: absolute;
+  top: 0; bottom: 0;
+  width: 1px;
+  background: var(--text-2);
+  opacity: .55;
+}
+.kink span {
+  position: absolute;
+  top: 50%;
+  left: 6px;
+  transform: translateY(-50%);
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 9.5px;
+  letter-spacing: .08em;
+  color: var(--text-2);
+  white-space: nowrap;
+}
+.caprow { display: flex; justify-content: space-between; font-size: 12px; color: var(--text-3); }
+.caprow b { color: var(--text); font-weight: 500; }
+
+/* ---- the rent curve ---------------------------------------------------- */
+
+.thesis {
+  margin-top: 46px;
+  display: grid;
+  grid-template-columns: minmax(0,1fr) 300px;
+  gap: 34px;
+  align-items: start;
+}
+.chartcard {
+  border: 1px solid var(--rule);
+  border-radius: 3px;
+  background: var(--surface);
+  padding: 20px 22px 14px;
+  box-shadow: var(--shadow);
+}
+.chartcard h2 { font-size: 19px; font-weight: 600; margin-bottom: 3px; }
+.chartcard .lede { color: var(--text-2); font-size: 13.5px; margin: 0 0 14px; max-width: 56ch; }
+.chartscroll { overflow-x: auto; }
+svg { display: block; width: 100%; height: auto; min-width: 460px; }
+
+.aside h3 { font-size: 15px; font-weight: 600; margin-bottom: 6px; }
+.aside p { color: var(--text-2); font-size: 13.5px; margin: 0 0 16px; }
+.aside p:last-child { margin-bottom: 0; }
+.aside .mark { color: var(--ember); font-weight: 500; }
+
+/* ---- lifecycle --------------------------------------------------------- */
+
+.lifecycle { margin-top: 46px; }
+.lifecycle h2 { font-size: 19px; font-weight: 600; }
+.lifecycle .lede { color: var(--text-2); font-size: 13.5px; margin: 4px 0 18px; max-width: 66ch; }
+
+.stages { display: flex; flex-wrap: wrap; gap: 0; border: 1px solid var(--rule); border-radius: 3px; overflow: hidden; }
+.stage {
+  flex: 1 1 150px;
+  padding: 13px 16px;
+  border-right: 1px solid var(--rule-soft);
+  background: var(--surface);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.stage:last-child { border-right: none; }
+.stage .nm { font-family: "IBM Plex Sans Condensed", sans-serif; font-weight: 600; font-size: 14px; }
+.stage .ds { font-size: 12px; color: var(--text-3); line-height: 1.45; }
+.stage.here { background: var(--ember-soft); }
+.stage.here .nm { color: var(--ember); }
+.stage .whos { font-family: "IBM Plex Mono", monospace; font-size: 10px; letter-spacing: .08em; text-transform: uppercase; color: var(--ember); }
+
+/* ---- footer ------------------------------------------------------------ */
+
+footer {
+  margin-top: 48px;
+  padding-top: 16px;
+  border-top: 1px solid var(--rule);
+  color: var(--text-3);
+  font-size: 12.5px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 26px;
+  justify-content: space-between;
+}
+
+@media (max-width: 880px) {
+  .lanes { grid-template-columns: 1fr 1fr; }
+  .rowlabel { grid-column: 1 / -1; background: var(--surface-2); font-weight: 500; color: var(--text); }
+  .corner { display: none; }
+  .thesis { grid-template-columns: 1fr; }
+}
+@media (max-width: 560px) {
+  body { padding: 24px 16px 56px; }
+  .lanes { grid-template-columns: 1fr; }
+  .ticker h1 { font-size: 32px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .capfill { transition: none; }
+}
+
+:focus-visible { outline: 2px solid var(--ember); outline-offset: 2px; }
+</style>
+
+<div class="wrap">
+
+  <header class="masthead">
+    <div class="ticker">
+      <h1>CASHCAT</h1>
+      <span class="price num">$0.00004718</span>
+      <span class="delta num">+11.4% 24h</span>
+    </div>
+    <div class="masthead-meta">
+      <div class="meta-item">
+        <span class="eyebrow">Spot depth ±2%</span>
+        <span class="v num">$1,455,000</span>
+      </div>
+      <div class="meta-item">
+        <span class="eyebrow">Token age</span>
+        <span class="v num">19 days</span>
+      </div>
+      <div class="meta-item">
+        <span class="eyebrow">Oracle</span>
+        <span class="v num">3 sources · healthy</span>
+      </div>
+    </div>
+  </header>
+
+  <p class="standfirst">
+    One token, two markets. CASHCAT is quoted against USDG and against ETH, and
+    the two lanes carry <strong>different leverage on different terms</strong> —
+    not by policy, but because the books behind them are different sizes. Each
+    lane prices its own scarcity.
+  </p>
+
+  <!-- Price above, and beneath it on the same axis the depth that earned each
+       leverage step. The pairing is the point: leverage follows the book. -->
+  <section class="pricecard" aria-label="CASHCAT price and granted leverage">
+    <div class="pricehead">
+      <h2>Nineteen days of CASHCAT</h2>
+      <div class="legend">
+        <span class="key"><i class="price"></i>Spot price</span>
+        <span class="key"><i class="depth"></i>Executable depth ±2%</span>
+        <span class="key"><i class="step"></i>Leverage granted</span>
+      </div>
+    </div>
+    <div class="pricebody">
+      <svg viewBox="0 0 900 372" role="img"
+           aria-label="CASHCAT spot price over nineteen days: launch near $0.0000176, a blow-off top near $0.0000946 on day three, an unwind to about $0.0000221 by day seven, then a long base and a recent rally to $0.00004718. Beneath, executable depth grows from about $54,000 to $840,000; the USDG lane was granted 2x on day four and 3x on day eleven.">
+        <g id="pricechart"></g>
+      </svg>
+    </div>
+  </section>
+
+  <!-- Two lanes as parallel instrument columns: the same measurement sits at
+       the same height in both, so the comparison reads across. -->
+  <section class="lanes" aria-label="Lane comparison">
+    <div class="corner"></div>
+    <div class="lane-head">
+      <span class="pair">CASHCAT<span class="quote">/USDG</span></span>
+      <span class="state live">Live</span>
+    </div>
+    <div class="lane-head">
+      <span class="pair">CASHCAT<span class="quote">/ETH</span></span>
+      <span class="state expanding">Live · expanding</span>
+    </div>
+
+    <div class="rowlabel">Available leverage</div>
+    <div class="cell">
+      <div class="lev"><span class="avail num">3.0×</span><span class="of">of 5× tier ceiling</span></div>
+      <div class="ladder"><span class="rung on">2×</span><span class="rung on">3×</span><span class="rung">5×</span></div>
+    </div>
+    <div class="cell">
+      <div class="lev"><span class="avail num">2.0×</span><span class="of">of 5× tier ceiling</span></div>
+      <div class="ladder"><span class="rung on">2×</span><span class="rung">3×</span><span class="rung">5×</span></div>
+    </div>
+
+    <div class="rowlabel">Market health</div>
+    <div class="cell">
+      <div class="scorewrap">
+        <div class="scoretop"><span class="n num">7,198</span><span class="d">/ 10,000 · lists above 5,500</span></div>
+        <div class="subscores" id="sub-usdg"></div>
+      </div>
+    </div>
+    <div class="cell">
+      <div class="scorewrap">
+        <div class="scoretop"><span class="n num">5,643</span><span class="d">/ 10,000 · lists above 5,500</span></div>
+        <div class="subscores" id="sub-eth"></div>
+      </div>
+    </div>
+
+    <div class="rowlabel">Open interest</div>
+    <div class="cell">
+      <div class="capacity">
+        <div class="capbar">
+          <div class="capfill" id="cap-usdg" style="width:0%"></div>
+          <div class="kink" style="left:80%"><span>kink 80%</span></div>
+        </div>
+        <div class="caprow">
+          <span><b class="num">$512,000</b> open</span>
+          <span><b class="num">42.7%</b> of capacity</span>
+          <span>cap <b class="num">$1,200,000</b></span>
+        </div>
+      </div>
+    </div>
+    <div class="cell">
+      <div class="capacity">
+        <div class="capbar">
+          <div class="capfill" id="cap-eth" style="width:0%"></div>
+          <div class="kink" style="left:80%"><span>kink 80%</span></div>
+        </div>
+        <div class="caprow">
+          <span><b class="num">$402,000</b> open</span>
+          <span><b class="num">52.0%</b> of capacity</span>
+          <span>cap <b class="num">$772,500</b></span>
+        </div>
+      </div>
+    </div>
+
+    <div class="rowlabel">Capacity rent</div>
+    <div class="cell">
+      <span class="big num">32.1%</span>
+      <span class="sub">annualised · <b>0.00367%</b> per hour</span>
+    </div>
+    <div class="cell">
+      <span class="big num">37.3%</span>
+      <span class="sub">annualised · <b>0.00425%</b> per hour</span>
+    </div>
+
+    <div class="rowlabel">Margin</div>
+    <div class="cell">
+      <span class="big num">33.33%</span>
+      <span class="sub">initial · maintenance <b>3.85%</b></span>
+    </div>
+    <div class="cell">
+      <span class="big num">50.00%</span>
+      <span class="sub">initial · maintenance <b>3.51%</b></span>
+    </div>
+
+    <div class="rowlabel">Underwriting</div>
+    <div class="cell">
+      <span class="big num">$260,000</span>
+      <span class="sub">first-loss capital · <b>$780,000</b> of the cap</span>
+    </div>
+    <div class="cell">
+      <span class="big num">$155,000</span>
+      <span class="sub">first-loss capital · <b>$465,000</b> of the cap</span>
+    </div>
+
+    <div class="rowlabel row-end">Funding</div>
+    <div class="cell row-end">
+      <span class="big num">+0.0041%</span>
+      <span class="sub">longs pay · perp <b>0.34%</b> rich</span>
+    </div>
+    <div class="cell row-end">
+      <span class="big num">−0.0018%</span>
+      <span class="sub">shorts pay · perp <b>0.09%</b> cheap</span>
+    </div>
+  </section>
+
+  <!-- Thesis object: why the rent is what it is. -->
+  <section class="thesis">
+    <div class="chartcard">
+      <h2>What the next dollar of exposure costs</h2>
+      <p class="lede">
+        Safe exposure is finite — bounded by what the book can actually absorb
+        and what first-loss capital can cover. Rent is nearly free while there is
+        room and becomes prohibitive as it runs out.
+      </p>
+      <div class="chartscroll">
+        <svg viewBox="0 0 640 300" role="img"
+             aria-label="Capacity rent against utilisation: flat to about 80 percent, then rising steeply. CASHCAT slash USDG sits at 42.7 percent and 32 percent annualised; CASHCAT slash ETH at 52 percent and 37 percent annualised.">
+          <g id="chart"></g>
+        </svg>
+      </div>
+    </div>
+
+    <aside class="aside">
+      <h3>Why both lanes still look cheap</h3>
+      <p>
+        Both sit well below the kink, so both pay close to the floor. USDG at
+        <span class="mark">42.7%</span> and ETH at <span class="mark">52.0%</span>
+        are five basis points apart per hour — the ETH lane costs more because it
+        is nearer its own, smaller ceiling.
+      </p>
+      <h3>Where it stops being cheap</h3>
+      <p>
+        Past 80% the curve turns. At full utilisation the rate is roughly forty
+        times the floor, which is the point: the last increment of exposure
+        should be refused by price before it has to be refused by a cap.
+      </p>
+      <h3>Who is paid</h3>
+      <p>
+        Rent goes to the parties carrying the lane's risk — 70% to underwriters,
+        who take the first loss before the insurance fund does, 20% to insurance,
+        10% to the protocol. Both sides of the book pay it, because both consume
+        capacity.
+      </p>
+    </aside>
+  </section>
+
+  <!-- Lifecycle: the stages are a real progression, so numbering them would be
+       the one case where sequence markers carry information. They are named
+       instead because a lane can move backwards through them. -->
+  <section class="lifecycle">
+    <h2>Where each lane sits</h2>
+    <p class="lede">
+      A lane is not listed or delisted, it moves. Leverage expands as liquidity
+      deepens and contracts as it thins; a dying market goes reduce-only and
+      waits for positions to wind down. Nothing is ever force-closed.
+    </p>
+    <div class="stages">
+      <div class="stage">
+        <span class="nm">Preparing</span>
+        <span class="ds">Spot trades, health is scored, no perp yet.</span>
+      </div>
+      <div class="stage here">
+        <span class="nm">Live</span>
+        <span class="whos">Both lanes</span>
+        <span class="ds">Leverage tracks liquidity, continuously.</span>
+      </div>
+      <div class="stage">
+        <span class="nm">Degraded</span>
+        <span class="ds">Score below 5,000 for 15 minutes. Tighter caps.</span>
+      </div>
+      <div class="stage">
+        <span class="nm">Reduce-only</span>
+        <span class="ds">Positions may close, none may open.</span>
+      </div>
+      <div class="stage">
+        <span class="nm">Closed</span>
+        <span class="ds">Settled; the execution lane is torn down.</span>
+      </div>
+    </div>
+  </section>
+
+  <footer>
+    <span>Figures produced by the risk engine for an illustrative CASHCAT market — not live trading data.</span>
+    <span class="num">Lane 1 · epoch 2,417 &nbsp;·&nbsp; Lane 2 · epoch 1,038</span>
+  </footer>
+</div>
+
+<script>
+(function () {
+  "use strict";
+
+  /* Subscore rows. The weights are the engine's: depth 30%, oracle 25%,
+     underwriting 20%, maturity 10%, dispersion 10%, stability 5%. */
+  var SUBS = {
+    "sub-usdg": [
+      ["Depth", 8400], ["Oracle", 8100], ["Underwriting", 5200],
+      ["Maturity", 10000], ["Dispersion", 4200], ["Stability", 3875]
+    ],
+    "sub-eth": [
+      ["Depth", 6150], ["Oracle", 6900], ["Underwriting", 3100],
+      ["Maturity", 10000], ["Dispersion", 2600], ["Stability", 3875]
+    ]
+  };
+
+  Object.keys(SUBS).forEach(function (id) {
+    var host = document.getElementById(id);
+    if (!host) return;
+    SUBS[id].forEach(function (row) {
+      var pct = row[1] / 100;
+      var el = document.createElement("div");
+      el.className = "sub-row";
+      el.innerHTML =
+        '<span class="name">' + row[0] + '</span>' +
+        '<span class="track"><span class="fill' + (pct >= 70 ? " strong" : "") +
+          '" style="width:' + pct + '%"></span></span>' +
+        '<span class="val num">' + pct.toFixed(0) + '</span>';
+      host.appendChild(el);
+    });
+  });
+
+  /* Capacity meters fill from zero once, from a visible resting state. */
+  var meters = [["cap-usdg", 42.7], ["cap-eth", 52.0]];
+  var reduce = window.matchMedia &&
+    window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  meters.forEach(function (m) {
+    var el = document.getElementById(m[0]);
+    if (!el) return;
+    if (reduce) { el.style.width = m[1] + "%"; return; }
+    requestAnimationFrame(function () {
+      requestAnimationFrame(function () { el.style.width = m[1] + "%"; });
+    });
+  });
+
+  /* Theme tokens, read once and shared by both charts. Declared here rather
+     than beside the second chart: `var` hoisting would leave them undefined
+     when the first one runs, and an SVG stroke of "undefined" renders as
+     nothing at all. */
+  var css = getComputedStyle(document.documentElement);
+  function tok(n) { return css.getPropertyValue(n).trim() || "#888"; }
+  var C_TEXT = tok("--text"), C_T2 = tok("--text-2"), C_T3 = tok("--text-3");
+  var C_EMBER = tok("--ember"), C_GRID = tok("--grid");
+
+  /* ---- price, depth and the leverage it earned --------------------------
+     One x-axis for both plots, because the claim is causal: the lane was
+     granted 2x when the book could support it and 3x when it deepened, and
+     that is only legible if the two share a timeline.                        */
+var SERIES = [
+  [0,1.7616e-05,54348,0],
+  [0.25,2.1038e-05,66103,0],
+  [0.5,2.6510e-05,72316,0],
+  [0.75,3.4598e-05,83080,0],
+  [1,4.5419e-05,89500,0],
+  [1.25,5.6265e-05,105201,0],
+  [1.5,7.1842e-05,106466,0],
+  [1.75,8.2261e-05,124270,0],
+  [2,8.8606e-05,133749,0],
+  [2.25,8.8658e-05,135788,0],
+  [2.5,7.7884e-05,151001,0],
+  [2.75,8.9269e-05,155000,0],
+  [3,8.3035e-05,167451,0],
+  [3.25,7.3827e-05,183829,0],
+  [3.5,6.4524e-05,188762,0],
+  [3.75,6.0209e-05,198897,0],
+  [4,5.3656e-05,212066,0],
+  [4.25,4.7918e-05,223803,2],
+  [4.5,4.5681e-05,235130,2],
+  [4.75,4.1803e-05,253534,2],
+  [5,3.8216e-05,277793,2],
+  [5.25,3.4259e-05,273187,2],
+  [5.5,3.1695e-05,298301,2],
+  [5.75,2.8694e-05,316431,2],
+  [6,2.6948e-05,307498,2],
+  [6.25,2.4934e-05,333116,2],
+  [6.5,2.2392e-05,353030,2],
+  [6.75,2.1176e-05,351495,2],
+  [7,3.0236e-05,371275,2],
+  [7.25,3.0311e-05,377051,2],
+  [7.5,3.0847e-05,381319,2],
+  [7.75,3.1506e-05,408858,2],
+  [8,3.1893e-05,431768,2],
+  [8.25,3.2051e-05,419693,2],
+  [8.5,3.3564e-05,454499,2],
+  [8.75,3.4291e-05,461953,2],
+  [9,3.3881e-05,453092,2],
+  [9.25,3.2860e-05,476792,2],
+  [9.5,3.4153e-05,466033,2],
+  [9.75,3.2582e-05,481541,2],
+  [10,3.3145e-05,515026,2],
+  [10.25,3.3897e-05,520117,2],
+  [10.5,3.3319e-05,524884,2],
+  [10.75,3.1694e-05,534044,2],
+  [11,3.2633e-05,530089,2],
+  [11.25,3.1550e-05,544845,2],
+  [11.5,3.2090e-05,535863,3],
+  [11.75,3.0222e-05,563123,3],
+  [12,3.0713e-05,580113,3],
+  [12.25,3.1150e-05,578903,3],
+  [12.5,3.1124e-05,588211,3],
+  [12.75,3.1765e-05,620556,3],
+  [13,3.2004e-05,595314,3],
+  [13.25,3.2410e-05,605031,3],
+  [13.5,3.3258e-05,633063,3],
+  [13.75,3.4231e-05,618519,3],
+  [14,3.4888e-05,666471,3],
+  [14.25,3.3738e-05,655542,3],
+  [14.5,3.5881e-05,675730,3],
+  [14.75,3.7364e-05,681711,3],
+  [15,3.7213e-05,715556,3],
+  [15.25,3.7198e-05,694210,3],
+  [15.5,3.5701e-05,705686,3],
+  [15.75,3.7896e-05,696396,3],
+  [16,3.6801e-05,722610,3],
+  [16.25,3.8640e-05,757561,3],
+  [16.5,3.8778e-05,723754,3],
+  [16.75,3.8871e-05,766439,3],
+  [17,3.9804e-05,769295,3],
+  [17.25,4.0988e-05,811086,3],
+  [17.5,4.2107e-05,804902,3],
+  [17.75,4.2352e-05,794366,3],
+  [18,4.2250e-05,839453,3],
+  [18.25,4.5146e-05,804249,3],
+  [18.5,4.5457e-05,827448,3],
+  [18.75,4.7180e-05,840000,3],
+];
+
+  (function drawPrice() {
+    var host = document.getElementById("pricechart");
+    if (!host) return;
+
+    var W = 900, H = 372;
+    var M = { t: 14, r: 16, b: 34, l: 84 };
+    var PH = 196;            /* price plot height */
+    var GAP = 26;            /* space between the two plots */
+    var DH = H - M.t - M.b - PH - GAP;   /* depth strip height */
+    var iw = W - M.l - M.r;
+    var priceTop = M.t, priceBot = M.t + PH;
+    var depthTop = priceBot + GAP, depthBot = depthTop + DH;
+
+    var days = SERIES[SERIES.length - 1][0];
+    var pMax = 0, dMax = 0;
+    SERIES.forEach(function (r) {
+      if (r[1] > pMax) pMax = r[1];
+      if (r[2] > dMax) dMax = r[2];
+    });
+    pMax *= 1.06;
+    dMax *= 1.10;
+
+    function X(d) { return M.l + (d / days) * iw; }
+    function YP(v) { return priceBot - (v / pMax) * PH; }
+    function YD(v) { return depthBot - (v / dMax) * DH; }
+
+    var o = [];
+    function el(tag, a, t) {
+      var str = "<" + tag;
+      for (var k in a) str += " " + k + '="' + a[k] + '"';
+      str += ">";
+      if (t !== undefined) str += t;
+      return str + "</" + tag + ">";
+    }
+    function money(v) {
+      return "$" + v.toFixed(6).replace(/0+$/, "").replace(/\.$/, "");
+    }
+    function thousands(v) {
+      return "$" + Math.round(v / 1000) + "k";
+    }
+
+    /* Leverage bands sit behind everything, so the price reads on top of the
+       terms that were in force when it printed. */
+    var band = null;
+    SERIES.forEach(function (r, i) {
+      var lev = r[3];
+      if (!band) { band = { lev: lev, from: r[0] }; return; }
+      if (lev !== band.lev || i === SERIES.length - 1) {
+        var to = r[0];
+        if (band.lev > 0) {
+          o.push(el("rect", {
+            x: X(band.from), y: priceTop,
+            width: Math.max(X(to) - X(band.from), 0),
+            height: depthBot - priceTop,
+            fill: C_EMBER, "fill-opacity": band.lev === 3 ? ".085" : ".045"
+          }));
+        }
+        /* The moment terms changed. */
+        if (band.lev > 0) {
+          o.push(el("line", {
+            x1: X(band.from), x2: X(band.from), y1: priceTop, y2: depthBot,
+            stroke: C_EMBER, "stroke-width": 1, "stroke-opacity": ".5"
+          }));
+          o.push(el("text", {
+            x: X(band.from) + 6, y: priceTop + 12,
+            fill: C_EMBER, "font-size": 11, "font-weight": 500,
+            "font-family": "IBM Plex Mono, monospace"
+          }, band.lev + "\u00d7 granted"));
+        }
+        band = { lev: lev, from: r[0] };
+      }
+    });
+    o.push(el("text", {
+      x: X(0) + 6, y: priceTop + 12,
+      fill: C_T3, "font-size": 11,
+      "font-family": "IBM Plex Mono, monospace"
+    }, "no market"));
+
+    /* Price grid and axis. */
+    [0, 2.5e-5, 5e-5, 7.5e-5].forEach(function (v) {
+      if (v > pMax) return;
+      o.push(el("line", {
+        x1: M.l, x2: M.l + iw, y1: YP(v), y2: YP(v),
+        stroke: C_GRID, "stroke-width": 1
+      }));
+      o.push(el("text", {
+        x: M.l - 10, y: YP(v) + 4, "text-anchor": "end",
+        fill: C_T3, "font-size": 10.5,
+        "font-family": "IBM Plex Mono, monospace"
+      }, money(v)));
+    });
+
+    /* Price area and line. */
+    var pp = SERIES.map(function (r) { return X(r[0]).toFixed(2) + "," + YP(r[1]).toFixed(2); });
+    o.push(el("path", {
+      d: "M" + X(0) + "," + priceBot + " L" + pp.join(" L") + " L" + X(days) + "," + priceBot + " Z",
+      fill: C_EMBER, "fill-opacity": ".13", stroke: "none"
+    }));
+    o.push(el("path", {
+      d: "M" + pp.join(" L"), fill: "none", stroke: C_EMBER,
+      "stroke-width": 2, "stroke-linejoin": "round", "stroke-linecap": "round"
+    }));
+
+    /* The current print, emphasised. */
+    var last = SERIES[SERIES.length - 1];
+    o.push(el("circle", { cx: X(last[0]), cy: YP(last[1]), r: 4, fill: C_EMBER }));
+    o.push(el("text", {
+      x: X(last[0]) - 8, y: YP(last[1]) - 10, "text-anchor": "end",
+      fill: C_TEXT, "font-size": 12, "font-weight": 500,
+      "font-family": "IBM Plex Mono, monospace"
+    }, money(last[1])));
+
+    /* Depth strip. */
+    o.push(el("line", {
+      x1: M.l, x2: M.l + iw, y1: depthBot, y2: depthBot,
+      stroke: C_GRID, "stroke-width": 1
+    }));
+    var dp = SERIES.map(function (r) { return X(r[0]).toFixed(2) + "," + YD(r[2]).toFixed(2); });
+    o.push(el("path", {
+      d: "M" + X(0) + "," + depthBot + " L" + dp.join(" L") + " L" + X(days) + "," + depthBot + " Z",
+      fill: C_T3, "fill-opacity": ".14", stroke: "none"
+    }));
+    o.push(el("path", {
+      d: "M" + dp.join(" L"), fill: "none", stroke: C_T3,
+      "stroke-width": 1.5, "stroke-linejoin": "round"
+    }));
+    o.push(el("text", {
+      x: M.l - 10, y: YD(dMax * 0.92) + 4, "text-anchor": "end",
+      fill: C_T3, "font-size": 10.5,
+      "font-family": "IBM Plex Mono, monospace"
+    }, thousands(last[2])));
+    o.push(el("text", {
+      x: M.l - 10, y: depthBot + 4, "text-anchor": "end",
+      fill: C_T3, "font-size": 10.5,
+      "font-family": "IBM Plex Mono, monospace"
+    }, "$0"));
+
+    /* Shared day axis. */
+    [0, 4, 8, 12, 16, 19].forEach(function (d) {
+      if (d > days) d = days;
+      o.push(el("text", {
+        x: X(d), y: H - 12, "text-anchor": d === 0 ? "start" : (d >= days ? "end" : "middle"),
+        fill: C_T3, "font-size": 10.5,
+        "font-family": "IBM Plex Mono, monospace"
+      }, d === 0 ? "launch" : "day " + d));
+    });
+
+    host.innerHTML = o.join("");
+  })();
+
+  /* ---- rent curve -------------------------------------------------------
+     Mirrors capacity::RentCurve::conservative_default in the VM:
+       u <= kink : base + slope_below * (u / kink)
+       u >  kink : base + slope_below + slope_above * ((u - kink) / (1 - kink))
+     Plotted as an annualised percentage, which is how the cost is felt.      */
+  var BASE = 0.00001, KINK = 0.8, BELOW = 0.00005, ABOVE = 0.002;
+  var PER_YEAR = 24 * 365;
+
+  function rate(u) {
+    var r = u <= KINK
+      ? BASE + BELOW * (u / KINK)
+      : BASE + BELOW + ABOVE * ((u - KINK) / (1 - KINK));
+    return r * PER_YEAR * 100;
+  }
+
+  var W = 640, H = 300;
+  var M = { t: 16, r: 20, b: 40, l: 62 };
+  var iw = W - M.l - M.r, ih = H - M.t - M.b;
+  var yMax = rate(1);
+
+  function px(u) { return M.l + u * iw; }
+  function py(v) { return M.t + ih - (v / yMax) * ih; }
+
+  var out = [];
+  function el(tag, attrs, text) {
+    var s = "<" + tag;
+    for (var k in attrs) s += " " + k + '="' + attrs[k] + '"';
+    s += ">";
+    if (text !== undefined) s += text;
+    return s + "</" + tag + ">";
+  }
+
+  /* Horizontal grid at values the curve actually reaches. */
+  [0, 400, 800, 1200, 1600].forEach(function (v) {
+    if (v > yMax) return;
+    out.push(el("line", {
+      x1: M.l, x2: M.l + iw, y1: py(v), y2: py(v),
+      stroke: C_GRID, "stroke-width": 1
+    }));
+    out.push(el("text", {
+      x: M.l - 10, y: py(v) + 4, "text-anchor": "end",
+      fill: C_T3, "font-size": 11,
+      "font-family": "IBM Plex Mono, monospace"
+    }, v + "%"));
+  });
+
+  /* Utilisation axis. */
+  [0, 20, 40, 60, 80, 100].forEach(function (p) {
+    out.push(el("text", {
+      x: px(p / 100), y: M.t + ih + 20, "text-anchor": "middle",
+      fill: C_T3, "font-size": 11,
+      "font-family": "IBM Plex Mono, monospace"
+    }, p + "%"));
+  });
+  out.push(el("text", {
+    x: M.l + iw / 2, y: H - 6, "text-anchor": "middle",
+    fill: C_T3, "font-size": 11, "letter-spacing": ".1em",
+    "font-family": "IBM Plex Mono, monospace"
+  }, "UTILISATION OF SAFE CAPACITY"));
+
+  /* The curve, plus a soft fill under it. */
+  var pts = [];
+  for (var i = 0; i <= 200; i++) {
+    var u = i / 200;
+    pts.push(px(u).toFixed(2) + "," + py(rate(u)).toFixed(2));
+  }
+  out.push(el("path", {
+    d: "M" + px(0) + "," + py(0) + " L" + pts.join(" L") + " L" + px(1) + "," + py(0) + " Z",
+    fill: C_EMBER, "fill-opacity": ".10", stroke: "none"
+  }));
+  out.push(el("path", {
+    d: "M" + pts.join(" L"), fill: "none",
+    stroke: C_EMBER, "stroke-width": 2.25, "stroke-linejoin": "round"
+  }));
+
+  /* The kink, where the curve turns. */
+  out.push(el("line", {
+    x1: px(KINK), x2: px(KINK), y1: M.t, y2: M.t + ih,
+    stroke: C_T2, "stroke-width": 1, "stroke-dasharray": "3 3", "stroke-opacity": ".7"
+  }));
+  out.push(el("text", {
+    x: px(KINK) - 8, y: M.t + 14, "text-anchor": "end",
+    fill: C_T2, "font-size": 11,
+    "font-family": "IBM Plex Mono, monospace"
+  }, "kink"));
+
+  /* Where the two lanes actually sit. */
+  [
+    { u: 0.427, label: "USDG  32%", dy: -14, anchor: "middle" },
+    { u: 0.520, label: "ETH  37%", dy: 26, anchor: "middle" }
+  ].forEach(function (m) {
+    var x = px(m.u), y = py(rate(m.u));
+    out.push(el("line", {
+      x1: x, x2: x, y1: y, y2: M.t + ih,
+      stroke: C_EMBER, "stroke-width": 1, "stroke-opacity": ".45"
+    }));
+    out.push(el("circle", { cx: x, cy: y, r: 4.5, fill: C_EMBER, stroke: "none" }));
+    out.push(el("text", {
+      x: x, y: y + m.dy, "text-anchor": m.anchor,
+      fill: C_TEXT, "font-size": 11.5, "font-weight": 500,
+      "font-family": "IBM Plex Mono, monospace"
+    }, m.label));
+  });
+
+  document.getElementById("chart").innerHTML = out.join("");
+})();
+</script>

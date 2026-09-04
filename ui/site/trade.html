@@ -1,0 +1,272 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Paper trading — Levu</title>
+<meta name="description" content="Paper-trade every spot market on Robinhood Chain that clears the listing gates. Live chain prices, no wallet, no risk.">
+<link rel="icon" href="/logo.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans+Condensed:wght@600;700&family=IBM+Plex+Sans:wght@400;500&display=swap">
+<style>
+:root{
+  color-scheme:dark;
+  --paper:#05070A;--surface:#0B0F14;--surface-2:#121821;
+  --rule:#1E2632;--rule-soft:#161D27;
+  --text:#EAF2EE;--text-2:#9BAAA5;--text-3:#6B7A77;
+  --ember:#00E58C;--ember-soft:#06251A;
+  --up:#00E58C;--down:#FF6B5A;--warn:#E8B339;--grid:#141B24;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--paper);color:var(--text);
+  font-family:"IBM Plex Sans",system-ui,sans-serif;font-size:15px;line-height:1.55;
+  -webkit-font-smoothing:antialiased}
+.num{font-family:"IBM Plex Mono",ui-monospace,monospace;font-variant-numeric:tabular-nums}
+.lbl{font-family:"IBM Plex Mono",monospace;font-size:9.5px;letter-spacing:.15em;
+  text-transform:uppercase;color:var(--text-3)}
+a{color:var(--ember)}
+a:focus-visible,button:focus-visible,input:focus-visible{outline:2px solid var(--ember);outline-offset:2px}
+.wrap{max-width:1320px;margin:0 auto;padding:0 20px}
+
+nav{border-bottom:1px solid var(--rule);background:var(--surface);position:sticky;top:0;z-index:5}
+nav .wrap{display:flex;align-items:center;gap:18px;padding:12px 20px}
+.mark{display:flex;align-items:center;gap:9px;font-family:"IBM Plex Sans Condensed",sans-serif;
+  font-weight:700;font-size:19px;color:var(--text);text-decoration:none}
+.mark .navmark{height:26px;width:auto;display:block;color:var(--text)}
+.mark .dot{color:var(--ember)}
+nav .spacer{margin-left:auto}
+nav a.lnk{font-size:13px;text-decoration:none;color:var(--text-2)}
+nav a.lnk:hover{color:var(--ember)}
+
+/* ---- account strip ---- */
+.acct{border-bottom:1px solid var(--rule);background:var(--surface)}
+.acct .wrap{display:flex;gap:34px;align-items:center;flex-wrap:wrap;padding:13px 20px}
+.acct .cell{display:flex;flex-direction:column;gap:1px}
+.acct .v{font-family:"IBM Plex Mono",monospace;font-size:19px;font-variant-numeric:tabular-nums;line-height:1.25}
+.acct .spacer{margin-left:auto}
+button.ghost{background:none;border:1px solid var(--rule);color:var(--text-2);
+  border-radius:3px;padding:6px 12px;font-size:12px;cursor:pointer;font-family:inherit}
+button.ghost:hover{border-color:var(--ember);color:var(--ember)}
+.conn{display:flex;align-items:center;gap:7px;font-size:12px;color:var(--text-3)}
+.dot{width:7px;height:7px;border-radius:50%;background:var(--text-3)}
+.dot.ok{background:var(--ember);box-shadow:0 0 7px var(--ember)}
+.dot.bad{background:var(--down)}
+
+/* ---- layout ---- */
+main{display:grid;grid-template-columns:minmax(0,1.15fr) minmax(0,1fr);gap:0;
+  min-height:calc(100vh - 118px)}
+@media(max-width:1000px){main{grid-template-columns:1fr}}
+.col{min-width:0}
+.col.left{border-right:1px solid var(--rule)}
+@media(max-width:1000px){.col.left{border-right:none;border-bottom:1px solid var(--rule)}}
+.pane{padding:16px 20px}
+.sechead{display:flex;align-items:baseline;gap:10px;margin-bottom:11px}
+.sechead .spacer{margin-left:auto}
+
+/* ---- market table ---- */
+.tools{display:flex;gap:8px;margin-bottom:11px;flex-wrap:wrap}
+input[type=search],input[type=number]{background:var(--surface-2);border:1px solid var(--rule);
+  color:var(--text);border-radius:3px;padding:7px 10px;font-family:"IBM Plex Mono",monospace;
+  font-size:13px;min-width:0}
+input[type=search]{flex:1}
+.chip{background:none;border:1px solid var(--rule);color:var(--text-3);border-radius:3px;
+  padding:6px 10px;font-size:11px;cursor:pointer;font-family:"IBM Plex Mono",monospace;
+  letter-spacing:.06em;text-transform:uppercase}
+.chip.on{border-color:var(--ember);color:var(--ember);background:var(--ember-soft)}
+.tblwrap{overflow-x:auto;max-height:calc(100vh - 300px);overflow-y:auto}
+table{border-collapse:collapse;width:100%;font-size:13px}
+th{position:sticky;top:0;background:var(--surface);z-index:1;text-align:right;
+  font-family:"IBM Plex Mono",monospace;font-size:9.5px;letter-spacing:.13em;
+  text-transform:uppercase;color:var(--text-3);font-weight:400;
+  padding:8px 10px;border-bottom:1px solid var(--rule);white-space:nowrap;cursor:pointer;user-select:none}
+th:first-child,td:first-child{text-align:left}
+th:hover{color:var(--ember)}
+td{padding:7px 10px;border-bottom:1px solid var(--rule-soft);text-align:right;white-space:nowrap;
+  font-family:"IBM Plex Mono",monospace;font-variant-numeric:tabular-nums}
+tbody tr{cursor:pointer}
+tbody tr:hover{background:var(--surface-2)}
+tbody tr.sel{background:var(--ember-soft)}
+tbody tr.sel td:first-child{box-shadow:inset 2px 0 0 var(--ember)}
+.sym{font-family:"IBM Plex Sans Condensed",sans-serif;font-weight:600;font-size:14px;
+  letter-spacing:.01em}
+.q{color:var(--text-3);font-size:10.5px;font-family:"IBM Plex Mono",monospace;
+  text-transform:uppercase;letter-spacing:.08em;margin-left:5px}
+.up{color:var(--up)}.down{color:var(--down)}.mut{color:var(--text-3)}
+.held{color:var(--ember);font-size:10px;letter-spacing:.08em}
+
+/* ---- ticket ---- */
+.card{border:1px solid var(--rule);border-radius:4px;background:var(--surface);padding:15px;
+  margin-bottom:14px}
+.px{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap;margin-bottom:3px}
+.px .big{font-family:"IBM Plex Mono",monospace;font-size:30px;font-variant-numeric:tabular-nums;
+  line-height:1.15}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px 16px;margin-top:12px}
+.grid2 .cell{display:flex;flex-direction:column;gap:1px}
+.grid2 .v{font-family:"IBM Plex Mono",monospace;font-size:14px;font-variant-numeric:tabular-nums}
+.side{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:13px 0 10px}
+.side button{padding:9px;border-radius:3px;border:1px solid var(--rule);background:var(--surface-2);
+  color:var(--text-2);font-family:"IBM Plex Mono",monospace;font-size:12px;letter-spacing:.1em;
+  text-transform:uppercase;cursor:pointer}
+.side button.on[data-side=buy]{background:var(--ember);border-color:var(--ember);color:var(--paper)}
+.side button.on[data-side=sell]{background:var(--down);border-color:var(--down);color:var(--paper)}
+.amt{display:flex;gap:8px;align-items:center}
+.amt input{flex:1}
+.pcts{display:flex;gap:6px;margin-top:8px}
+.pcts button{flex:1;padding:5px;font-size:11px}
+.fill{margin-top:12px;border-top:1px solid var(--rule-soft);padding-top:11px;
+  display:grid;grid-template-columns:1fr auto;gap:4px 12px;font-size:12.5px}
+.fill .k{color:var(--text-3)}
+.fill .v{font-family:"IBM Plex Mono",monospace;text-align:right;font-variant-numeric:tabular-nums}
+button.submit{width:100%;margin-top:13px;padding:11px;border-radius:3px;border:none;
+  background:var(--ember);color:var(--paper);font-weight:600;font-size:14px;cursor:pointer;
+  font-family:inherit}
+button.submit.sell{background:var(--down)}
+button.submit:disabled{background:var(--surface-2);color:var(--text-3);cursor:not-allowed}
+.note{font-size:12px;color:var(--text-3);margin-top:9px;line-height:1.5}
+.warnbox{border:1px solid var(--rule);border-left:2px solid var(--warn);border-radius:3px;
+  background:var(--surface-2);padding:9px 11px;font-size:12px;color:var(--text-2);margin-top:11px}
+.warnbox b{color:var(--warn);font-weight:500}
+.empty{color:var(--text-3);font-size:13px;padding:22px 0;text-align:center}
+.tag{display:inline-block;border:1px solid var(--rule);border-radius:2px;padding:1px 6px;
+  font-family:"IBM Plex Mono",monospace;font-size:9.5px;letter-spacing:.1em;text-transform:uppercase;
+  color:var(--text-3)}
+.tag.spot{border-color:var(--ember);color:var(--ember)}
+footer{border-top:1px solid var(--rule);padding:18px 0;font-size:12px;color:var(--text-3)}
+</style>
+</head>
+<body>
+
+<nav><div class="wrap">
+  <a class="mark" href="/">
+    <svg class="navmark" viewBox="0 0 40 40" fill="none" aria-hidden="true">
+      <path d="M6 6v28h28" stroke="currentColor" stroke-width="3.4" stroke-linecap="square"/>
+      <path d="M13 26l6-9 5 6 8-13" stroke="#00E58C" stroke-width="3.4"
+            stroke-linecap="square" stroke-linejoin="round"/>
+    </svg>
+    <span class="word">levu<span class="dot">.</span></span>
+  </a>
+  <span class="spacer"></span>
+  <a class="lnk" href="/">Home</a>
+  <a class="lnk" href="/terminal">Live terminal</a>
+</div></nav>
+
+<div class="acct"><div class="wrap">
+  <div class="cell"><span class="lbl">Equity</span><span class="v num" id="equity">—</span></div>
+  <div class="cell"><span class="lbl">Cash</span><span class="v num" id="cash">—</span></div>
+  <div class="cell"><span class="lbl">Positions</span><span class="v num" id="posval">—</span></div>
+  <div class="cell"><span class="lbl">Unrealised</span><span class="v num" id="upnl">—</span></div>
+  <div class="cell"><span class="lbl">Realised</span><span class="v num" id="rpnl">—</span></div>
+  <span class="spacer"></span>
+  <div class="conn"><span class="dot" id="dot"></span><span id="connText">connecting…</span></div>
+  <button class="ghost" id="reset">Reset account</button>
+</div></div>
+
+<main>
+  <div class="col left"><div class="pane">
+    <div class="sechead">
+      <span class="lbl">Spot markets</span>
+      <span class="lbl" id="mktNote">—</span>
+      <span class="spacer"></span>
+      <span class="lbl">Robinhood Chain</span>
+    </div>
+    <div class="tools">
+      <input type="search" id="q" placeholder="filter by symbol…" autocomplete="off">
+      <button class="chip" id="fHeld">Held only</button>
+      <button class="chip" id="fUsdg">USDG</button>
+      <button class="chip" id="fEth">ETH</button>
+    </div>
+    <div class="tblwrap">
+      <table>
+        <thead><tr>
+          <th data-k="symbol">Market</th>
+          <th data-k="px">Price</th>
+          <th data-k="chg">Since load</th>
+          <th data-k="volume_24h_usd">24h volume</th>
+          <th data-k="depth_2pct_usd">Depth ±2%</th>
+          <th data-k="score">Health</th>
+          <th data-k="posv">Position</th>
+        </tr></thead>
+        <tbody id="rows"></tbody>
+      </table>
+    </div>
+  </div></div>
+
+  <div class="col"><div class="pane">
+    <div class="card">
+      <div class="sechead"><span class="lbl">Ticket</span><span class="spacer"></span>
+        <span class="tag spot" id="tagLev">spot · 1×</span></div>
+      <div class="px">
+        <span class="big num" id="tPx">—</span>
+        <span class="num" id="tChg"></span>
+        <span class="mut num" id="tSym" style="margin-left:auto"></span>
+      </div>
+      <div class="grid2">
+        <div class="cell"><span class="lbl">Executable depth ±2%</span><span class="v" id="tDepth">—</span></div>
+        <div class="cell"><span class="lbl">24h volume</span><span class="v" id="tVol">—</span></div>
+        <div class="cell"><span class="lbl">Health score</span><span class="v" id="tScore">—</span></div>
+        <div class="cell"><span class="lbl">Your position</span><span class="v" id="tPos">—</span></div>
+      </div>
+
+      <div class="side">
+        <button data-side="buy" class="on">Buy</button>
+        <button data-side="sell">Sell</button>
+      </div>
+      <div class="amt">
+        <input type="number" id="amt" placeholder="0.00" min="0" step="any" inputmode="decimal">
+        <span class="lbl" id="amtUnit">USD</span>
+      </div>
+      <div class="pcts">
+        <button class="chip" data-pct="25">25%</button>
+        <button class="chip" data-pct="50">50%</button>
+        <button class="chip" data-pct="75">75%</button>
+        <button class="chip" data-pct="100">Max</button>
+      </div>
+
+      <div class="fill">
+        <span class="k">Mid</span><span class="v" id="fMid">—</span>
+        <span class="k">Slippage</span><span class="v" id="fSlip">—</span>
+        <span class="k">Average fill</span><span class="v" id="fAvg">—</span>
+        <span class="k">You receive</span><span class="v" id="fGet">—</span>
+      </div>
+      <button class="submit" id="go" disabled>Select a market</button>
+      <div id="warn"></div>
+      <p class="note" id="ticketNote">
+        Paper only. Fills are simulated against the pool's own executable depth,
+        so a size the market cannot absorb is priced like one — the same linear
+        model the risk engine uses to size a position against a book.
+      </p>
+    </div>
+
+    <div class="card">
+      <div class="sechead"><span class="lbl">Positions</span><span class="spacer"></span>
+        <span class="lbl" id="posNote">—</span></div>
+      <div class="tblwrap" style="max-height:270px">
+        <table><thead><tr>
+          <th data-k="symbol">Market</th><th>Qty</th><th>Avg cost</th>
+          <th>Mark</th><th>Value</th><th>P&amp;L</th>
+        </tr></thead><tbody id="posRows"></tbody></table>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="sechead"><span class="lbl">Fills</span><span class="spacer"></span>
+        <span class="lbl" id="tradeNote">—</span></div>
+      <div class="tblwrap" style="max-height:210px">
+        <table><thead><tr>
+          <th>Time</th><th>Market</th><th>Side</th><th>Qty</th><th>Price</th><th>Value</th>
+        </tr></thead><tbody id="tradeRows"></tbody></table>
+      </div>
+    </div>
+  </div></div>
+</main>
+
+<footer><div class="wrap">
+  Prices read from Robinhood Chain mainnet. Balances and fills are simulated in your
+  browser and never leave it. Markets shown are those that clear the listing gates —
+  <a href="/">how that is decided</a>.
+</div></footer>
+
+<script type="module" src="/trade.js"></script>
+</body>
+</html>

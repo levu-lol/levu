@@ -1,0 +1,454 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>WETH/USDG — Lane Terminal</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans+Condensed:wght@600;700&family=IBM+Plex+Sans:wght@400;500&display=swap">
+<style>
+:root {
+  --paper:#F4F5F7; --surface:#FFF; --surface-2:#ECEEF1;
+  --rule:#D6DAE0; --rule-soft:#E4E7EB;
+  --text:#171B21; --text-2:#4A525D; --text-3:#6B7480;
+  --ember:#B96A18; --ember-soft:#F2E3D0;
+  --up:#3F7659; --down:#A34733; --grid:#E1E4E9;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --paper:#101317; --surface:#171B21; --surface-2:#1E232B;
+    --rule:#2C333D; --rule-soft:#232830;
+    --text:#E8EBEF; --text-2:#A3ACB8; --text-3:#7C8593;
+    --ember:#E09242; --ember-soft:#3A2A17;
+    --up:#6BAE87; --down:#D2705A; --grid:#242A33;
+  }
+}
+:root[data-theme="dark"] {
+  --paper:#101317; --surface:#171B21; --surface-2:#1E232B;
+  --rule:#2C333D; --rule-soft:#232830;
+  --text:#E8EBEF; --text-2:#A3ACB8; --text-3:#7C8593;
+  --ember:#E09242; --ember-soft:#3A2A17;
+  --up:#6BAE87; --down:#D2705A; --grid:#242A33;
+}
+
+* { box-sizing:border-box; }
+html, body { height:100%; }
+body {
+  margin:0; background:var(--paper); color:var(--text);
+  font-family:"IBM Plex Sans", system-ui, sans-serif; font-size:14px;
+  display:flex; flex-direction:column; -webkit-font-smoothing:antialiased;
+}
+.num { font-family:"IBM Plex Mono", ui-monospace, monospace; font-variant-numeric:tabular-nums; }
+.lbl {
+  font-family:"IBM Plex Mono", monospace; font-size:9.5px; letter-spacing:.14em;
+  text-transform:uppercase; color:var(--text-3);
+}
+
+/* ---- top bar ---- */
+header {
+  display:flex; align-items:center; gap:28px; flex-wrap:wrap;
+  padding:10px 18px; border-bottom:1px solid var(--rule); background:var(--surface);
+}
+.pair { display:flex; align-items:baseline; gap:10px; }
+.pair h1 {
+  margin:0; font-family:"IBM Plex Sans Condensed", sans-serif;
+  font-size:19px; font-weight:700; letter-spacing:-.01em;
+}
+.pair .chain { font-size:11px; color:var(--text-3); }
+
+.last { display:flex; align-items:baseline; gap:9px; }
+#last { font-size:26px; font-weight:500; letter-spacing:-.015em; transition:color .18s; }
+#last.up { color:var(--up); }
+#last.down { color:var(--down); }
+#lastArrow { font-size:13px; width:9px; display:inline-block; }
+
+.stat { display:flex; flex-direction:column; gap:1px; min-width:74px; }
+.stat .v { font-size:14px; font-weight:500; }
+.stat .v.sm { font-size:12.5px; }
+
+.conn { margin-left:auto; display:flex; align-items:center; gap:7px; font-size:11px; color:var(--text-3); }
+.dot { width:7px; height:7px; border-radius:50%; background:var(--text-3); }
+.dot.on { background:var(--up); }
+.dot.off { background:var(--down); }
+
+/* ---- body ---- */
+main { flex:1; display:grid; grid-template-columns:minmax(0,1fr) 320px; min-height:0; }
+.chartpane { display:flex; flex-direction:column; min-width:0; border-right:1px solid var(--rule); }
+.chartbar {
+  display:flex; align-items:center; gap:20px; flex-wrap:wrap;
+  padding:8px 16px; border-bottom:1px solid var(--rule-soft); background:var(--surface);
+}
+.key { display:inline-flex; align-items:center; gap:6px; font-size:11px; color:var(--text-3); }
+.key i { width:13px; height:2px; display:inline-block; border-radius:1px; }
+.key i.index { background:var(--ember); }
+.key i.mark { background:var(--text-2); }
+.key i.band { background:var(--ember); opacity:.22; height:8px; }
+#canvasWrap { flex:1; position:relative; min-height:260px; background:var(--surface); }
+canvas { position:absolute; inset:0; width:100%; height:100%; display:block; }
+
+.rail { display:flex; flex-direction:column; min-height:0; background:var(--surface); }
+.railsec { border-bottom:1px solid var(--rule-soft); }
+.railhead {
+  display:flex; justify-content:space-between; align-items:baseline;
+  padding:9px 14px 6px;
+}
+.venues { padding:0 14px 10px; display:flex; flex-direction:column; gap:5px; }
+.venue { display:grid; grid-template-columns:1fr auto; gap:2px 10px; align-items:baseline; }
+.venue .n { font-size:11.5px; color:var(--text-2); }
+.venue .p { font-size:12.5px; font-weight:500; }
+.venue.out .n, .venue.out .p { color:var(--text-3); text-decoration:line-through; }
+.vbar { grid-column:1 / -1; height:3px; background:var(--grid); border-radius:1px; overflow:hidden; }
+.vbar i { display:block; height:100%; background:var(--ember); opacity:.6; }
+
+.tape { flex:1; overflow-y:auto; padding:0 14px 10px; min-height:120px; }
+.trow {
+  display:grid; grid-template-columns:56px 1fr auto; gap:8px;
+  font-size:11.5px; padding:2px 0; border-bottom:1px solid var(--rule-soft);
+}
+.trow .t { color:var(--text-3); }
+.trow .p.up { color:var(--up); }
+.trow .p.down { color:var(--down); }
+.trow .c { color:var(--text-3); }
+
+/* ---- risk strip ---- */
+.risk {
+  display:grid; grid-template-columns:repeat(auto-fit, minmax(150px, 1fr));
+  border-top:1px solid var(--rule); background:var(--surface);
+}
+.inst { padding:10px 16px; border-right:1px solid var(--rule-soft); display:flex; flex-direction:column; gap:3px; }
+.inst:last-child { border-right:none; }
+.inst .v { font-size:19px; font-weight:500; letter-spacing:-.01em; }
+.inst .s { font-size:11px; color:var(--text-3); }
+.meter { height:5px; background:var(--grid); border-radius:1px; overflow:hidden; margin-top:4px; }
+.meter i { display:block; height:100%; background:var(--ember); transition:width .4s ease-out; }
+
+footer {
+  padding:7px 18px; border-top:1px solid var(--rule);
+  font-size:11px; color:var(--text-3);
+  display:flex; gap:8px 22px; flex-wrap:wrap; justify-content:space-between;
+  background:var(--surface);
+}
+
+@media (max-width:900px) {
+  main { grid-template-columns:1fr; }
+  .chartpane { border-right:none; border-bottom:1px solid var(--rule); }
+  #canvasWrap { min-height:220px; }
+}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="pair">
+    <h1>WETH/USDG</h1>
+    <span class="chain">Robinhood Chain · 4663</span>
+  </div>
+
+  <div class="last">
+    <span id="lastArrow" class="num"></span>
+    <span id="last" class="num">—</span>
+  </div>
+
+  <div class="stat"><span class="lbl">Index</span><span id="index" class="v num">—</span></div>
+  <div class="stat"><span class="lbl">Mark</span><span id="mark" class="v num">—</span></div>
+  <div class="stat"><span class="lbl">Band</span><span id="band" class="v num sm">±50 bps</span></div>
+  <div class="stat"><span class="lbl">Confidence</span><span id="conf" class="v num">—</span></div>
+  <div class="stat"><span class="lbl">Sources</span><span id="srcs" class="v num sm">—</span></div>
+
+  <div class="conn"><span id="dot" class="dot"></span><span id="connText">connecting…</span></div>
+</header>
+
+<main>
+  <section class="chartpane">
+    <div class="chartbar">
+      <span class="key"><i class="index"></i>Aggregated index</span>
+      <span class="key"><i class="mark"></i>Mark</span>
+      <span class="key"><i class="band"></i>±50 bps band</span>
+      <span class="key" style="margin-left:auto"><span id="ticks" class="num">0</span>&nbsp;ticks · <span id="lat" class="num">—</span>&nbsp;ms</span>
+    </div>
+    <div id="canvasWrap"><canvas id="chart"></canvas></div>
+  </section>
+
+  <aside class="rail">
+    <div class="railsec">
+      <div class="railhead"><span class="lbl">Venues</span><span class="lbl" id="venueNote">live pools</span></div>
+      <div class="venues" id="venues"></div>
+    </div>
+    <div class="railsec" style="flex:1; display:flex; flex-direction:column; min-height:0;">
+      <div class="railhead"><span class="lbl">Tape</span><span class="lbl">index · conf</span></div>
+      <div class="tape" id="tape"></div>
+    </div>
+  </aside>
+</main>
+
+<section class="risk">
+  <div class="inst">
+    <span class="lbl">Market health</span>
+    <span class="v num" id="score">—</span>
+    <span class="s">lists above 5,500</span>
+  </div>
+  <div class="inst">
+    <span class="lbl">Leverage</span>
+    <span class="v num" id="lev">—</span>
+    <span class="s" id="levSub">granted by the engine</span>
+  </div>
+  <div class="inst">
+    <span class="lbl">Capacity used</span>
+    <span class="v num" id="util">—</span>
+    <span class="s" id="utilSub">—</span>
+    <div class="meter"><i id="utilBar" style="width:0%"></i></div>
+  </div>
+  <div class="inst">
+    <span class="lbl">Capacity rent</span>
+    <span class="v num" id="rent">—</span>
+    <span class="s">annualised, both sides pay</span>
+  </div>
+  <div class="inst">
+    <span class="lbl">Executable depth</span>
+    <span class="v num" id="depth">—</span>
+    <span class="s" id="depthSub">within ±2%</span>
+  </div>
+  <div class="inst">
+    <span class="lbl">Maintenance</span>
+    <span class="v num" id="maint">—</span>
+    <span class="s">of notional</span>
+  </div>
+</section>
+
+<footer>
+  <span>Prices are live, aggregated from Uniswap pools on Robinhood Chain. Risk figures are the PerpVM's own output. Order flow into the lane is synthetic — nobody is trading this market yet.</span>
+  <span class="num" id="stamp">—</span>
+</footer>
+
+<script>
+(function () {
+  "use strict";
+
+  var MAX = 480;
+  var ticks = [];
+  var lastPrice = null;
+
+  var $ = function (id) { return document.getElementById(id); };
+
+  function money(v, dp) {
+    if (v === null || v === undefined || !isFinite(v)) return "—";
+    return v.toLocaleString("en-US", {
+      minimumFractionDigits: dp === undefined ? 2 : dp,
+      maximumFractionDigits: dp === undefined ? 2 : dp
+    });
+  }
+  function usd(v) {
+    if (!isFinite(v) || v === 0) return "—";
+    if (v >= 1e6) return "$" + (v / 1e6).toFixed(2) + "M";
+    if (v >= 1e3) return "$" + Math.round(v / 1e3) + "k";
+    return "$" + Math.round(v);
+  }
+  function pct(v) { return (v * 100).toFixed(1) + "%"; }
+
+  /* ---- rendering ------------------------------------------------------- */
+
+  function paintHeader(t) {
+    var el = $("last");
+    el.textContent = money(t.index, 2);
+    if (lastPrice !== null && t.index !== lastPrice) {
+      var up = t.index > lastPrice;
+      el.classList.toggle("up", up);
+      el.classList.toggle("down", !up);
+      $("lastArrow").textContent = up ? "▲" : "▼";
+      $("lastArrow").style.color = up ? "var(--up)" : "var(--down)";
+    }
+    lastPrice = t.index;
+
+    $("index").textContent = money(t.index, 4);
+    $("mark").textContent = money(t.mark, 4);
+    $("band").textContent = "±" + t.bandBps.toFixed(0) + " bps";
+    $("conf").textContent = t.conf.toLocaleString();
+    $("srcs").textContent = (t.venues.filter(function (v) { return v.used; }).length) +
+      " of " + t.venues.length;
+    $("ticks").textContent = ticks.length;
+    $("lat").textContent = t.latencyMs;
+    $("stamp").textContent = t.at.replace("T", " ").replace("Z", " UTC");
+  }
+
+  function paintRisk(t) {
+    $("score").textContent = t.score ? t.score.toLocaleString() : "—";
+    $("lev").textContent = t.leverage ? t.leverage + "×" : "no market";
+    $("levSub").textContent = t.state === "live"
+      ? "granted by the engine" : "below the listing bar";
+    $("util").textContent = t.oiCap ? pct(t.utilisation) : "—";
+    $("utilSub").textContent = t.oiCap
+      ? usd(t.openInterest) + " of " + usd(t.oiCap) : "no capacity";
+    $("utilBar").style.width = Math.min(t.utilisation * 100, 100) + "%";
+    $("rent").textContent = t.oiCap ? t.rentAnnual.toFixed(1) + "%" : "—";
+    $("depth").textContent = usd(t.depthUsd);
+    $("depthSub").textContent = "within ±2% · " + usd(t.tvl) + " TVL";
+    $("maint").textContent = t.maintBps ? (t.maintBps / 100).toFixed(2) + "%" : "—";
+  }
+
+  function paintVenues(t) {
+    var host = $("venues");
+    var max = 0;
+    t.venues.forEach(function (v) { if (v.depth > max) max = v.depth; });
+
+    host.innerHTML = t.venues.map(function (v) {
+      var w = max > 0 ? (v.depth / max) * 100 : 0;
+      return '<div class="venue' + (v.used ? "" : " out") + '">' +
+        '<span class="n">' + v.name + "</span>" +
+        '<span class="p num">' + money(v.price, 4) + "</span>" +
+        '<span class="vbar"><i style="width:' + w.toFixed(1) + '%"></i></span>' +
+        "</div>";
+    }).join("");
+
+    $("venueNote").textContent = t.failed.length
+      ? t.failed.length + " unreachable" : "live pools";
+  }
+
+  function pushTape(t, prev) {
+    var tape = $("tape");
+    var dir = prev === null ? "" : (t.index > prev ? "up" : (t.index < prev ? "down" : ""));
+    var row = document.createElement("div");
+    row.className = "trow";
+    row.innerHTML =
+      '<span class="t num">' + t.at.slice(11, 19) + "</span>" +
+      '<span class="p num ' + dir + '">' + money(t.index, 4) + "</span>" +
+      '<span class="c num">' + t.conf + "</span>";
+    tape.insertBefore(row, tape.firstChild);
+    while (tape.childElementCount > 60) tape.removeChild(tape.lastChild);
+  }
+
+  /* ---- chart ----------------------------------------------------------- */
+
+  var canvas = $("chart"), ctx = canvas.getContext("2d");
+
+  function resize() {
+    var wrap = $("canvasWrap");
+    var dpr = window.devicePixelRatio || 1;
+    canvas.width = Math.max(wrap.clientWidth, 1) * dpr;
+    canvas.height = Math.max(wrap.clientHeight, 1) * dpr;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    draw();
+  }
+  window.addEventListener("resize", resize);
+
+  function tok(n) {
+    return getComputedStyle(document.documentElement).getPropertyValue(n).trim() || "#888";
+  }
+
+  function draw() {
+    var wrap = $("canvasWrap");
+    var W = wrap.clientWidth, H = wrap.clientHeight;
+    ctx.clearRect(0, 0, W, H);
+    if (ticks.length < 2) return;
+
+    var M = { t: 16, r: 66, b: 22, l: 12 };
+    var iw = W - M.l - M.r, ih = H - M.t - M.b;
+    if (iw <= 0 || ih <= 0) return;
+
+    var lo = Infinity, hi = -Infinity;
+    ticks.forEach(function (t) {
+      var b = t.index * 0.005;
+      lo = Math.min(lo, t.index - b, t.mark);
+      hi = Math.max(hi, t.index + b, t.mark);
+    });
+    var pad = (hi - lo) * 0.18 || 1;
+    lo -= pad; hi += pad;
+
+    var X = function (i) { return M.l + (i / (ticks.length - 1)) * iw; };
+    var Y = function (v) { return M.t + ih - ((v - lo) / (hi - lo)) * ih; };
+
+    var C_EMBER = tok("--ember"), C_T2 = tok("--text-2"),
+        C_T3 = tok("--text-3"), C_GRID = tok("--grid");
+
+    /* Price grid, labelled on the right where a terminal puts it. */
+    ctx.font = '10px "IBM Plex Mono", monospace';
+    ctx.textBaseline = "middle";
+    for (var g = 0; g <= 4; g++) {
+      var v = lo + (hi - lo) * (g / 4);
+      var y = Y(v);
+      ctx.strokeStyle = C_GRID; ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.moveTo(M.l, y + 0.5); ctx.lineTo(M.l + iw, y + 0.5); ctx.stroke();
+      ctx.fillStyle = C_T3; ctx.textAlign = "left";
+      ctx.fillText(money(v, 2), M.l + iw + 8, y);
+    }
+
+    /* The band: the region the mark is allowed to occupy. Drawn first so the
+       lines sit on top of it. */
+    ctx.beginPath();
+    ticks.forEach(function (t, i) {
+      var y = Y(t.index * 1.005);
+      i === 0 ? ctx.moveTo(X(i), y) : ctx.lineTo(X(i), y);
+    });
+    for (var i = ticks.length - 1; i >= 0; i--) {
+      ctx.lineTo(X(i), Y(ticks[i].index * 0.995));
+    }
+    ctx.closePath();
+    ctx.fillStyle = C_EMBER; ctx.globalAlpha = 0.13; ctx.fill(); ctx.globalAlpha = 1;
+
+    /* Mark, then index on top. */
+    ctx.beginPath();
+    ticks.forEach(function (t, i) {
+      var y = Y(t.mark);
+      i === 0 ? ctx.moveTo(X(i), y) : ctx.lineTo(X(i), y);
+    });
+    ctx.strokeStyle = C_T2; ctx.lineWidth = 1; ctx.stroke();
+
+    ctx.beginPath();
+    ticks.forEach(function (t, i) {
+      var y = Y(t.index);
+      i === 0 ? ctx.moveTo(X(i), y) : ctx.lineTo(X(i), y);
+    });
+    ctx.strokeStyle = C_EMBER; ctx.lineWidth = 1.75;
+    ctx.lineJoin = "round"; ctx.stroke();
+
+    /* Current print, on the right rail. */
+    var last = ticks[ticks.length - 1];
+    var ly = Y(last.index);
+    ctx.beginPath(); ctx.arc(X(ticks.length - 1), ly, 3, 0, Math.PI * 2);
+    ctx.fillStyle = C_EMBER; ctx.fill();
+    ctx.fillStyle = C_EMBER; ctx.textAlign = "left";
+    ctx.font = '600 10.5px "IBM Plex Mono", monospace';
+    ctx.fillText(money(last.index, 2), M.l + iw + 8, ly);
+  }
+
+  /* ---- stream ---------------------------------------------------------- */
+
+  function setConn(state, text) {
+    var d = $("dot");
+    d.className = "dot" + (state ? " on" : " off");
+    $("connText").textContent = text;
+  }
+
+  function connect() {
+    var es = new EventSource("/api/stream");
+
+    es.addEventListener("open", function () { setConn(true, "live"); });
+
+    es.addEventListener("tick", function (ev) {
+      var t;
+      try { t = JSON.parse(ev.data); } catch (e) { return; }
+      var prev = ticks.length ? ticks[ticks.length - 1].index : null;
+
+      ticks.push(t);
+      if (ticks.length > MAX) ticks.shift();
+
+      paintHeader(t);
+      paintRisk(t);
+      paintVenues(t);
+      pushTape(t, prev);
+      draw();
+      setConn(true, "live");
+    });
+
+    es.addEventListener("error", function () {
+      setConn(false, "reconnecting…");
+      // EventSource retries on its own; closing here would stop that.
+    });
+  }
+
+  resize();
+  connect();
+})();
+</script>
+</body>
+</html>

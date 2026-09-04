@@ -1,0 +1,150 @@
+<title>Paper Terminal</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans+Condensed:wght@600;700&family=IBM+Plex+Sans:wght@400;500&display=swap">
+<style>
+:root{
+  --paper:#F4F5F7;--surface:#FFF;--surface-2:#ECEEF1;
+  --rule:#D6DAE0;--rule-soft:#E4E7EB;
+  --text:#171B21;--text-2:#4A525D;--text-3:#6B7480;
+  --ember:#B96A18;--up:#3F7659;--down:#A34733;--grid:#E1E4E9;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --paper:#101317;--surface:#171B21;--surface-2:#1E232B;
+  --rule:#2C333D;--rule-soft:#232830;
+  --text:#E8EBEF;--text-2:#A3ACB8;--text-3:#7C8593;
+  --ember:#E09242;--up:#6BAE87;--down:#D2705A;--grid:#242A33;}}
+:root[data-theme="dark"]{
+  --paper:#101317;--surface:#171B21;--surface-2:#1E232B;
+  --rule:#2C333D;--rule-soft:#232830;
+  --text:#E8EBEF;--text-2:#A3ACB8;--text-3:#7C8593;
+  --ember:#E09242;--up:#6BAE87;--down:#D2705A;--grid:#242A33;}
+*{box-sizing:border-box}
+html,body{height:100%}
+body{margin:0;background:var(--paper);color:var(--text);
+  font-family:"IBM Plex Sans",system-ui,sans-serif;font-size:14px;
+  display:flex;flex-direction:column;-webkit-font-smoothing:antialiased}
+.num{font-family:"IBM Plex Mono",ui-monospace,monospace;font-variant-numeric:tabular-nums}
+.lbl{font-family:"IBM Plex Mono",monospace;font-size:9.5px;letter-spacing:.14em;
+  text-transform:uppercase;color:var(--text-3)}
+header{display:flex;align-items:center;gap:24px;flex-wrap:wrap;padding:10px 18px;
+  border-bottom:1px solid var(--rule);background:var(--surface)}
+h1{margin:0;font-family:"IBM Plex Sans Condensed",sans-serif;font-size:18px;font-weight:700}
+.chain{font-size:11px;color:var(--text-3)}
+#px{font-size:26px;font-weight:500;letter-spacing:-.015em;transition:color .18s}
+#px.up{color:var(--up)}#px.down{color:var(--down)}
+.stat{display:flex;flex-direction:column;gap:1px;min-width:66px}
+.stat .v{font-size:14px;font-weight:500}
+.conn{margin-left:auto;display:flex;align-items:center;gap:7px;font-size:11px;color:var(--text-3)}
+.dot{width:7px;height:7px;border-radius:50%;background:var(--text-3)}
+.dot.on{background:var(--up)}.dot.off{background:var(--down)}
+main{flex:1;display:grid;grid-template-columns:minmax(0,1fr) 320px;min-height:0}
+.left{display:flex;flex-direction:column;min-width:0;border-right:1px solid var(--rule)}
+#wrap{flex:1;position:relative;min-height:260px;background:var(--surface)}
+canvas{position:absolute;inset:0;width:100%;height:100%;display:block}
+.side{display:flex;flex-direction:column;min-height:0;background:var(--surface);overflow-y:auto}
+.sec{border-bottom:1px solid var(--rule-soft);padding:12px 14px}
+.sec h2{margin:0 0 8px;font-family:"IBM Plex Mono",monospace;font-size:9.5px;
+  letter-spacing:.14em;text-transform:uppercase;color:var(--text-3);font-weight:400}
+.row{display:flex;justify-content:space-between;align-items:baseline;padding:3px 0;font-size:12.5px}
+.row .k{color:var(--text-3)}
+button{appearance:none;font:inherit;cursor:pointer;border-radius:3px;
+  border:1px solid var(--rule);background:var(--surface-2);color:var(--text);
+  padding:7px 10px;transition:background .12s,border-color .12s}
+button:hover{border-color:var(--ember)}
+button:disabled{opacity:.45;cursor:not-allowed}
+button.primary{background:var(--ember);border-color:var(--ember);color:var(--paper);font-weight:500}
+.buy,.sell{flex:1;font-weight:500}
+.buy{background:var(--up);border-color:var(--up);color:#fff}
+.sell{background:var(--down);border-color:var(--down);color:#fff}
+.pair{display:flex;gap:8px;margin-top:8px}
+input{font:inherit;font-family:"IBM Plex Mono",monospace;width:100%;padding:7px 9px;
+  border:1px solid var(--rule);border-radius:3px;background:var(--paper);color:var(--text)}
+input:focus{outline:2px solid var(--ember);outline-offset:-1px;border-color:var(--ember)}
+.field{margin-bottom:8px}
+.field label{display:block;margin-bottom:3px}
+#log{font-family:"IBM Plex Mono",monospace;font-size:11px;line-height:1.55;
+  max-height:190px;overflow-y:auto;color:var(--text-2)}
+#log div{padding:2px 0;border-bottom:1px solid var(--rule-soft)}
+#log .err{color:var(--down)}#log .ok{color:var(--up)}
+.banner{padding:8px 18px;background:var(--surface-2);border-bottom:1px solid var(--rule);
+  font-size:11.5px;color:var(--text-2)}
+.banner b{color:var(--text)}
+footer{padding:7px 18px;border-top:1px solid var(--rule);font-size:11px;
+  color:var(--text-3);background:var(--surface)}
+@media (max-width:900px){main{grid-template-columns:1fr}
+  .left{border-right:none;border-bottom:1px solid var(--rule)}#wrap{min-height:200px}}
+</style>
+
+<header>
+  <div>
+    <select id="pairSel" style="font:inherit;font-family:'IBM Plex Sans Condensed',sans-serif;
+      font-size:18px;font-weight:700;background:transparent;color:var(--text);
+      border:1px solid var(--rule);border-radius:3px;padding:2px 6px"></select>
+    <div class="chain">Robinhood Chain · 4663</div>
+  </div>
+  <div class="num" id="px">—</div>
+  <div class="stat"><span class="lbl">Leverage</span><span class="v num" id="lev">—</span></div>
+  <div class="stat"><span class="lbl">Maintenance</span><span class="v num" id="maint">—</span></div>
+  <div class="stat"><span class="lbl">Confidence</span><span class="v num" id="conf">—</span></div>
+  <div class="stat"><span class="lbl">Fills</span><span class="v num" id="fills">—</span></div>
+  <div class="conn"><span class="num" id="age"></span><span class="dot" id="dot"></span><span id="connText">connecting…</span></div>
+</header>
+
+<div class="banner">
+  <b>Prices are live from Robinhood Chain. Collateral is paper.</b>
+  Orders go through the same PerpVM that would settle real money — same matching,
+  margin, funding and liquidation. Only the money is imaginary, and you get it once.
+</div>
+
+<main>
+  <section class="left"><div id="wrap"><canvas id="chart"></canvas></div></section>
+  <aside class="side">
+    <div class="sec">
+      <h2>Account</h2>
+      <div id="noacct">
+        <p style="margin:0 0 8px;font-size:12.5px;color:var(--text-2)">
+          A paper stake, issued once. It can be lost, which is the point.</p>
+        <button class="primary" id="start" style="width:100%">Get 10,000 paper USDG</button>
+      </div>
+      <div id="acct" hidden>
+        <div class="row"><span class="k">Address</span><span class="num" id="addr">—</span></div>
+        <div class="row"><span class="k">Balance, free</span><span class="num" id="free0">—</span></div>
+        <div class="row"><span class="k">Allocated to lanes</span><span class="num" id="alloc">—</span></div>
+        <div class="row"><span class="k">Equity here</span><span class="num" id="eq">—</span></div>
+        <div class="row"><span class="k">Free margin</span><span class="num" id="free">—</span></div>
+        <div class="row"><span class="k">Position</span><span class="num" id="size">—</span></div>
+        <div class="row"><span class="k">Entry</span><span class="num" id="entry">—</span></div>
+        <div class="row"><span class="k">Unrealised</span><span class="num" id="pnl">—</span></div>
+        <div class="row"><span class="k">Liquidation</span><span class="num" id="liq">—</span></div>
+      </div>
+    </div>
+
+    <div class="sec" id="ticket" hidden>
+      <h2>Order</h2>
+      <div class="field"><label class="lbl" for="qty">Quantity</label>
+        <input id="qty" class="num" value="0.10" inputmode="decimal"></div>
+      <div class="field"><label class="lbl" for="price">Limit price — blank for market</label>
+        <input id="price" class="num" placeholder="market" inputmode="decimal"></div>
+      <div class="row" id="quote" style="border-top:1px solid var(--rule-soft);
+           margin-top:6px;padding-top:8px">
+        <span class="k">Your leverage at this size</span><span class="num" id="qlev">—</span>
+      </div>
+      <div id="qnote" style="font-size:11px;color:var(--text-3);margin:-2px 0 8px"></div>
+      <div class="pair">
+        <button class="buy" id="buy">Buy / Long</button>
+        <button class="sell" id="sell">Sell / Short</button>
+      </div>
+      <button id="flat" style="width:100%;margin-top:8px">Close position</button>
+    </div>
+
+    <div class="sec">
+      <h2>Activity</h2>
+      <div id="log"><div>waiting for a price…</div></div>
+    </div>
+  </aside>
+</main>
+
+<footer><span id="foot">—</span></footer>
+
+<script type="module" src="./app.js"></script>
