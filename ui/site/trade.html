@@ -63,6 +63,12 @@ button.ghost{background:none;border:1px solid var(--rule);color:var(--text-2);
   border-radius:3px;padding:6px 12px;font-size:12px;cursor:pointer;font-family:inherit}
 button.ghost:hover{border-color:var(--ember);color:var(--ember)}
 .conn{display:flex;align-items:center;gap:7px;font-size:12px;color:var(--text-3)}
+.wallet{border-bottom:1px solid var(--rule);background:var(--surface-2)}
+.wallet .wrap{display:flex;gap:14px;align-items:center;flex-wrap:wrap;padding:10px 20px}
+.wallet .addr{font-size:13px;color:var(--ember)}
+.wallet .num{font-family:"IBM Plex Mono",monospace;font-size:14px}
+.wallet .s{font-size:12px;color:var(--text-3);margin-left:auto;max-width:52ch;text-align:right}
+button.ghost:disabled{opacity:.45;cursor:not-allowed;border-color:var(--rule);color:var(--text-3)}
 .dot{width:7px;height:7px;border-radius:50%;background:var(--text-3)}
 .dot.ok{background:var(--ember);box-shadow:0 0 7px var(--ember)}
 .dot.bad{background:var(--down)}
@@ -176,7 +182,17 @@ footer{border-top:1px solid var(--rule);padding:18px 0;font-size:12px;color:var(
   <div class="cell"><span class="lbl">Realised</span><span class="v num" id="rpnl">—</span></div>
   <span class="spacer"></span>
   <div class="conn"><span class="dot" id="dot"></span><span id="connText">connecting…</span></div>
+  <button class="ghost" id="connect">Connect wallet</button>
   <button class="ghost" id="reset">Reset account</button>
+</div></div>
+
+<div class="wallet" id="walletBar" hidden><div class="wrap">
+  <span class="lbl">Account</span>
+  <span class="num addr" id="walletAddr">—</span>
+  <span class="lbl">tUSDG</span>
+  <span class="num" id="walletBal">—</span>
+  <button class="ghost" id="claim">Claim 1,000 tUSDG</button>
+  <span class="s" id="walletNote"></span>
 </div></div>
 
 <main>

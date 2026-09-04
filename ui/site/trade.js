@@ -461,3 +461,194 @@ $("reset").onclick = () => {
   }
   loop();
 })();
+
+/* ---- wallet ------------------------------------------------------------- *
+ *
+ * The identity a trader on Robinhood Chain already has is their address, so
+ * connecting a wallet does not create a second one -- it names the one they
+ * have. The server derives the account from the address directly: twenty bytes
+ * either way, no mapping to keep, and the same wallet is the same account on
+ * another device or after the server is rebuilt.
+ *
+ * Nothing here ever sees a private key. The wallet signs a message we hand it
+ * and the server recovers the signer; we could not spend anything even if we
+ * wanted to, and the message says so in words the signer can read.
+ */
+
+const SERVER = "https://92-5-12-15.sslip.io";
+const RH_CHAIN = { id: 4663, hex: "0x1237" };
+const WKEY = "levu.wallet.v1";
+
+let wallet = null;   // { address, token }
+
+function loadWallet() {
+  try {
+    const raw = localStorage.getItem(WKEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch { return null; }
+}
+function saveWallet(w) {
+  try {
+    if (w) localStorage.setItem(WKEY, JSON.stringify(w));
+    else localStorage.removeItem(WKEY);
+  } catch { /* private window; the session simply does not persist */ }
+}
+
+async function api(path, opts = {}) {
+  const res = await fetch(SERVER + path, {
+    ...opts,
+    headers: {
+      "content-type": "application/json",
+      ...(wallet ? { "X-Paper-Token": wallet.token } : {}),
+      ...(opts.headers || {}),
+    },
+  });
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(body.error || `server ${res.status}`);
+  return body;
+}
+
+/* Ask the wallet to move to Robinhood Chain, offering to add it if unknown.
+ *
+ * Signing does not strictly need the right chain -- the message carries the
+ * chain id and the server checks nothing else -- but a wallet pointed at
+ * somewhere else is a trader who will be confused later, so it is worth
+ * settling now. */
+async function ensureChain(eth) {
+  const current = await eth.request({ method: "eth_chainId" });
+  if (current === RH_CHAIN.hex) return true;
+  try {
+    await eth.request({
+      method: "wallet_switchEthereumChain",
+      params: [{ chainId: RH_CHAIN.hex }],
+    });
+    return true;
+  } catch (err) {
+    if (err && err.code === 4902) {
+      try {
+        await eth.request({
+          method: "wallet_addEthereumChain",
+          params: [{
+            chainId: RH_CHAIN.hex,
+            chainName: "Robinhood Chain",
+            nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
+            rpcUrls: [RPC],
+          }],
+        });
+        return true;
+      } catch { /* declined */ }
+    }
+    return false; // declining is a choice, not an error
+  }
+}
+
+async function connectWallet() {
+  const eth = window.ethereum;
+  if (!eth) {
+    note("No wallet found in this browser. Paper trading works without one — " +
+         "an account only matters for the tUSDG faucet.");
+    return;
+  }
+  const btn = $("connect");
+  btn.disabled = true;
+  btn.textContent = "Connecting…";
+  try {
+    const accounts = await eth.request({ method: "eth_requestAccounts" });
+    if (!accounts || !accounts.length) throw new Error("no account offered");
+    const address = accounts[0];
+    await ensureChain(eth);
+
+    const { message } = await api("/api/nonce", {
+      method: "POST", body: JSON.stringify({ address }),
+    });
+    // personal_sign: the wallet shows the text and signs it. It authorises no
+    // transaction and costs no gas, and the message says exactly that.
+    const signature = await eth.request({
+      method: "personal_sign", params: [message, address],
+    });
+    const out = await api("/api/connect", {
+      method: "POST", body: JSON.stringify({ address, signature }),
+    });
+    wallet = { address: out.address, token: out.token };
+    saveWallet(wallet);
+    note(out.can_claim ? "Connected. The faucet has today's grant waiting."
+                       : "Connected. Today's grant is already claimed.");
+    await refreshWallet();
+  } catch (err) {
+    // A rejected signature is somebody saying no, not a failure to report as one.
+    note(err && err.code === 4001 ? "Signature declined." : "Could not connect: " + err.message);
+  } finally {
+    btn.disabled = false;
+    paintWallet();
+  }
+}
+
+async function refreshWallet() {
+  if (!wallet) return;
+  try {
+    const st = await api("/api/state?token=" + encodeURIComponent(wallet.token));
+    const bal = st.balance && st.balance.tusdg;
+    $("walletBal").textContent = bal ? Number(bal.deposited).toLocaleString("en-US") : "0";
+  } catch { /* the balance is a nicety; the page works without it */ }
+  paintWallet();
+}
+
+async function claim() {
+  if (!wallet) return;
+  const btn = $("claim");
+  btn.disabled = true;
+  try {
+    const out = await api("/api/faucet", { method: "POST" });
+    note(`Received ${Number(out.granted).toLocaleString("en-US")} tUSDG. ` +
+         `Next grant after ${new Date(out.next_claim).toLocaleString()}.`);
+    await refreshWallet();
+  } catch (err) {
+    note(err.message);
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+function note(text) { $("walletNote").textContent = text; }
+
+function paintWallet() {
+  const bar = $("walletBar");
+  if (!wallet) {
+    bar.hidden = true;
+    $("connect").textContent = "Connect wallet";
+    return;
+  }
+  bar.hidden = false;
+  const a = wallet.address;
+  $("walletAddr").textContent = a.slice(0, 6) + "…" + a.slice(-4);
+  $("connect").textContent = "Disconnect";
+}
+
+$("connect").onclick = () => {
+  if (wallet) {
+    wallet = null;
+    saveWallet(null);
+    note("");
+    paintWallet();
+    return;
+  }
+  connectWallet();
+};
+$("claim").onclick = claim;
+
+/* A wallet that changes account in the extension is a different trader. */
+if (window.ethereum && window.ethereum.on) {
+  window.ethereum.on("accountsChanged", (accs) => {
+    if (!wallet) return;
+    if (!accs.length || accs[0].toLowerCase() !== wallet.address.toLowerCase()) {
+      wallet = null;
+      saveWallet(null);
+      note("Wallet changed account — reconnect to sign in as that address.");
+      paintWallet();
+    }
+  });
+}
+
+wallet = loadWallet();
+paintWallet();
+if (wallet) refreshWallet();
