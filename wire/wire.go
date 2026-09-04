@@ -35,6 +35,14 @@ const (
 	// somebody else trades and anything keeping its own copy learns that late
 	// or not at all. A trader who cannot see a resting order cannot cancel it.
 	OpAccountOrders uint8 = 10
+	// OpBookLevels reports the resting book aggregated by price, best first.
+	//
+	// OpBookDepth answers how much is resting inside a band, which is what the
+	// risk engine needs. This answers what shape it is in, which is what a
+	// trader needs: a book that is one order at one price behaves nothing like
+	// the same total spread over twenty levels, and only the second can absorb
+	// a close without walking the price.
+	OpBookLevels uint8 = 11
 )
 
 // Response status.
@@ -575,6 +583,74 @@ func EncodeAccountOrders(e *Encoder, marketID uint32, account Account) []byte {
 
 // DecodeAccountOrders parses the reply: the standard ok-header, a count, then
 // that many (id, side, price, qty) records.
+// Level is one price in the book and everything resting at it.
+type Level struct {
+	Price Fixed
+	Qty   Fixed
+}
+
+// DecodeBookLevels parses an OpBookLevels reply: the ok-header, then the bids
+// length-prefixed, then the asks.
+func DecodeBookLevels(frame []byte) (bids, asks []Level, err error) {
+	d := NewDecoder(frame)
+	status, err := d.U8()
+	if err != nil {
+		return nil, nil, err
+	}
+	if status == StatusError {
+		msg, err := d.String16()
+		if err != nil {
+			return nil, nil, err
+		}
+		return nil, nil, fmt.Errorf("vm: %s", msg)
+	}
+	if status != StatusOK {
+		return nil, nil, fmt.Errorf("wire: unknown status %d", status)
+	}
+	for i := 0; i < 2; i++ { // seq, epoch
+		if _, err := d.U64(); err != nil {
+			return nil, nil, err
+		}
+	}
+	if _, err := d.Hash(); err != nil { // root
+		return nil, nil, err
+	}
+	for i := 0; i < 2; i++ { // uncoveredDebt, fundingIndex
+		if _, err := d.Fixed(); err != nil {
+			return nil, nil, err
+		}
+	}
+	side := func() ([]Level, error) {
+		n, err := d.U32()
+		if err != nil {
+			return nil, err
+		}
+		out := make([]Level, 0, n)
+		for i := uint32(0); i < n; i++ {
+			px, err := d.Fixed()
+			if err != nil {
+				return nil, err
+			}
+			qty, err := d.Fixed()
+			if err != nil {
+				return nil, err
+			}
+			out = append(out, Level{Price: px, Qty: qty})
+		}
+		return out, nil
+	}
+	if bids, err = side(); err != nil {
+		return nil, nil, err
+	}
+	if asks, err = side(); err != nil {
+		return nil, nil, err
+	}
+	if d.Remaining() != 0 {
+		return nil, nil, fmt.Errorf("wire: %d trailing bytes after book levels", d.Remaining())
+	}
+	return bids, asks, nil
+}
+
 func DecodeAccountOrders(frame []byte) ([]RestingOrder, error) {
 	d := NewDecoder(frame)
 	status, err := d.U8()

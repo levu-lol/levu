@@ -348,6 +348,7 @@ function render() {
 
   renderTicket();
   loadChart(sel);
+  loadBook(sel);
   pushChartPoint(sel);
   renderPositions(positions);
   renderOpenOrders();
@@ -552,6 +553,76 @@ function pushChartPoint(m) {
   if (chartTicks.length > 4000) chartTicks.shift();
   $("chartNote").textContent = "";
   chart.setTicks(chartTicks.slice());
+}
+
+/* ---- the book ------------------------------------------------------------ */
+
+/* The shape of the book, not just its total.
+ *
+ * This exchange's whole claim is that leverage comes from the depth a position
+ * would be closed into. A trader could read that as one number and never see
+ * whether it was one order at one price or twenty levels deep -- which is the
+ * difference between a book that absorbs a close and one that walks the price
+ * doing it. */
+let bookPair = null;
+let bookAt = 0;
+let bookBusy = false;
+
+async function loadBook(m) {
+  if (!m) return;
+  const pair = keyOf(m);
+  // render() runs on every tick and on every click; the book only needs
+  // refetching when the market changes or a couple of seconds have passed.
+  const stale = pair !== bookPair || Date.now() - bookAt > 2500;
+  if (bookBusy || !stale) return;
+  bookBusy = true;
+  bookAt = Date.now();
+  try {
+    const b = await server("/api/book?levels=8&pair=" + encodeURIComponent(pair));
+    if (keyOf(sel || {}) !== pair) return;     // the trader moved on
+    bookPair = pair;
+    renderBook(b);
+  } catch {
+    if (keyOf(sel || {}) === pair) renderBook(null);
+  } finally {
+    bookBusy = false;
+  }
+}
+
+function renderBook(b) {
+  const asks = (b && b.asks) || [];
+  const bids = (b && b.bids) || [];
+  const peak = Math.max(
+    ...asks.map((l) => l.cumulative), ...bids.map((l) => l.cumulative), 1);
+
+  const row = (l, cls) => {
+    const d = document.createElement("div");
+    d.className = "lrow " + cls;
+    d.innerHTML =
+      `<span class="bar" style="width:${Math.max(2, (l.cumulative / peak) * 100)}%"></span>` +
+      `<span class="px">${fmtPx(l.price)}</span>` +
+      `<span class="qty">${fmtQty(l.qty)}</span>` +
+      `<span class="cum">${fmtCompact(l.cumulative)}</span>`;
+    return d;
+  };
+
+  /* Asks read downwards to the spread, the way every book is drawn. */
+  $("askRows").replaceChildren(...asks.slice().reverse().map((l) => row(l, "ask")));
+  $("bidRows").replaceChildren(...bids.map((l) => row(l, "bid")));
+
+  if (!asks.length && !bids.length) {
+    const e = document.createElement("div");
+    e.className = "empty";
+    e.textContent = "Nothing resting. A market order here has nothing to fill against.";
+    $("askRows").replaceChildren(e);
+  }
+
+  const bestAsk = asks.length ? asks[0].price : 0;
+  const bestBid = bids.length ? bids[0].price : 0;
+  $("ladderMid").textContent = (b && b.index > 0) ? fmtPx(b.index) : "—";
+  $("spreadNote").textContent = bestAsk && bestBid
+    ? ((bestAsk - bestBid) / ((bestAsk + bestBid) / 2) * 10000).toFixed(0) + " bps wide"
+    : "one-sided";
 }
 
 function setConn(ok, text) {
