@@ -35,6 +35,7 @@ let sel = null;
 let side = "buy";
 let account = null;        // { balance, positions } from the server
 let fills = [];            // this session's fills, for the tape
+let openOrders = [];       // resting orders, read from the book each poll
 let sort = { k: "volume_24h_usd", dir: -1 };
 let wallet = null;         // { address, token }, once signed in
 let orderType = "market";  // "market" crosses; "limit" rests
@@ -92,6 +93,17 @@ async function tick() {
   }).filter((m) => m.open);
 
   account = wallet ? { balance: st.balance || {}, positions: st.positions || {} } : null;
+  if (wallet) {
+    // From the book, every poll. A resting order fills when somebody else
+    // trades, so a list kept here would show orders that are already gone.
+    try {
+      openOrders = (await server("/api/orders")).orders || [];
+    } catch {
+      openOrders = [];
+    }
+  } else {
+    openOrders = [];
+  }
   if (sel) sel = markets.find((m) => keyOf(m) === keyOf(sel)) || markets[0];
   return markets.length;
 }
@@ -308,6 +320,7 @@ function render() {
 
   renderTicket();
   renderPositions(positions);
+  renderOpenOrders();
   renderFills();
 }
 
@@ -349,6 +362,44 @@ function renderPositions(positions) {
     const tr = document.createElement("tr");
     tr.innerHTML = `<td colspan="6" class="empty">No positions. Pick a market and open one.</td>`;
     $("posRows").replaceChildren(tr);
+  }
+}
+
+function renderOpenOrders() {
+  $("ordNote").textContent = openOrders.length ? openOrders.length + " resting" : "none";
+  $("ordRows").replaceChildren(...openOrders.map((o) => {
+    const [sym, q] = o.pair.split("/");
+    const tr = document.createElement("tr");
+    tr.innerHTML =
+      `<td><span class="sym">${sym}</span><span class="q">${q}</span></td>` +
+      `<td class="${o.side === "buy" ? "up" : "down"}">${o.side === "buy" ? "long" : "short"}</td>` +
+      `<td>${fmtQty(o.qty)}</td><td>${fmtPx(o.price)}</td>` +
+      `<td><button class="close" data-id="${o.id}" data-pair="${o.pair}">Cancel</button></td>`;
+    tr.querySelector("button").onclick = (e) => cancelOrder(o, e.target);
+    return tr;
+  }));
+  if (!openOrders.length) {
+    const tr = document.createElement("tr");
+    tr.innerHTML = `<td colspan="5" class="empty">No resting orders.</td>`;
+    $("ordRows").replaceChildren(tr);
+  }
+}
+
+async function cancelOrder(o, btn) {
+  if (!wallet) return;
+  btn.disabled = true;
+  btn.textContent = "…";
+  try {
+    await server("/api/cancel", {
+      method: "POST",
+      body: JSON.stringify({ token: wallet.token, pair: o.pair, id: o.id }),
+    });
+    note(`Cancelled order ${o.id}.`);
+    await refresh();
+  } catch (err) {
+    note("Could not cancel: " + err.message);
+    btn.disabled = false;
+    btn.textContent = "Cancel";
   }
 }
 

@@ -28,6 +28,13 @@ const (
 	// OpBookDepth reports resting depth in the lane's own book. Distinct from
 	// the spot venue's depth, which is a different pool of liquidity.
 	OpBookDepth uint8 = 9
+	// OpAccountOrders lists one account's resting orders.
+	//
+	// A read op rather than something the control plane tracks alongside: the
+	// book is the authority on what is resting, because an order fills when
+	// somebody else trades and anything keeping its own copy learns that late
+	// or not at all. A trader who cannot see a resting order cannot cancel it.
+	OpAccountOrders uint8 = 10
 )
 
 // Response status.
@@ -549,4 +556,81 @@ func (d *Decoder) String16() (string, error) {
 
 func (d *Decoder) Errorf(format string, a ...any) error {
 	return fmt.Errorf(format, a...)
+}
+
+// RestingOrder is one of an account's live orders, as the book holds it.
+type RestingOrder struct {
+	ID    uint64
+	Side  Side
+	Price Fixed
+	Qty   Fixed
+}
+
+// EncodeAccountOrders frames a request for one account's resting orders.
+func EncodeAccountOrders(e *Encoder, marketID uint32, account Account) []byte {
+	e.Reset()
+	e.U8(OpAccountOrders).U32(marketID).Bytes(account[:])
+	return e.buf
+}
+
+// DecodeAccountOrders parses the reply: the standard ok-header, a count, then
+// that many (id, side, price, qty) records.
+func DecodeAccountOrders(frame []byte) ([]RestingOrder, error) {
+	d := NewDecoder(frame)
+	status, err := d.U8()
+	if err != nil {
+		return nil, err
+	}
+	if status == StatusError {
+		msg, err := d.String16()
+		if err != nil {
+			return nil, err
+		}
+		return nil, fmt.Errorf("vm: %s", msg)
+	}
+	if status != StatusOK {
+		return nil, fmt.Errorf("wire: unknown status %d", status)
+	}
+	for i := 0; i < 2; i++ { // seq, epoch
+		if _, err := d.U64(); err != nil {
+			return nil, err
+		}
+	}
+	if _, err := d.Hash(); err != nil { // root
+		return nil, err
+	}
+	for i := 0; i < 2; i++ { // uncoveredDebt, fundingIndex
+		if _, err := d.Fixed(); err != nil {
+			return nil, err
+		}
+	}
+	n, err := d.U32()
+	if err != nil {
+		return nil, err
+	}
+	out := make([]RestingOrder, 0, n)
+	for i := uint32(0); i < n; i++ {
+		id, err := d.U64()
+		if err != nil {
+			return nil, err
+		}
+		sd, err := d.U8()
+		if err != nil {
+			return nil, err
+		}
+		px, err := d.Fixed()
+		if err != nil {
+			return nil, err
+		}
+		qty, err := d.Fixed()
+		if err != nil {
+			return nil, err
+		}
+		side := Bid
+		if sd == 1 {
+			side = Ask
+		}
+		out = append(out, RestingOrder{ID: id, Side: side, Price: px, Qty: qty})
+	}
+	return out, nil
 }
