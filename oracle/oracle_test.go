@@ -18,19 +18,67 @@ func src(name string, price, liq int64) Source {
 	}
 }
 
-func TestSingleSourceIsUsedButScoresLowCoverage(t *testing.T) {
+// A lone venue is a single point of failure, and MinSources is what says so.
+//
+// Confidence gives it a bounded discount rather than a ruinous one: coverage is
+// 1/4, but cross-checking is worth half of confidence, so the reading lands at
+// 6,250 rather than 2,500. That is deliberate. Multiplying coverage by depth
+// counted the same liquidity twice, and on a chain whose median market has two
+// pools it drove the median confidence of every listable market to 186.
+//
+// The protection against trusting one venue is MinSources, which refuses the
+// reading outright. A number that merely scores low invites somebody to lower
+// the threshold; a reading marked unhealthy does not.
+func TestALoneVenueIsDiscountedAndRefused(t *testing.T) {
 	cfg := DefaultConfig()
+	one := []Source{src("uniswap", 100, 1_000_000)}
+
+	// Refused at the default, whatever its confidence.
+	if r := Aggregate(one, cfg, now); r.Healthy {
+		t.Error("a single source passed MinSources = 2")
+	}
+
 	cfg.MinSources = 1
-	r := Aggregate([]Source{src("uniswap", 100, 1_000_000)}, cfg, now)
+	r := Aggregate(one, cfg, now)
 	if r.Price.Cmp(wire.FixedWhole(100)) != 0 {
 		t.Fatalf("price = %s, want 100", r.Price)
 	}
 	if !r.Healthy {
 		t.Error("one source should be usable when MinSources is 1")
 	}
-	// Coverage is 1/4, depth and agreement are 1, so confidence is 2500.
-	if r.Confidence != 2500 {
-		t.Errorf("confidence = %d, want 2500 (a lone venue is a single point of failure)", r.Confidence)
+	if got, want := r.Coverage, wire.FixedRawInt64(250_000_000_000_000_000); got.Cmp(want) != 0 {
+		t.Errorf("coverage = %s, want 0.25: the discount belongs in the combination, not here", got)
+	}
+	if r.Confidence != 6250 {
+		t.Errorf("confidence = %d, want 6250", r.Confidence)
+	}
+}
+
+// Cross-checking is worth something, and worth a bounded something.
+//
+// Adding independent agreeing depth must raise confidence -- otherwise the
+// discount is not doing its job -- but a market with one deep source must not
+// be driven to nothing, which is what the old formula did.
+func TestCrossCheckingRaisesConfidenceWithoutRuiningItsAbsence(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.MinSources = 1
+	deep := src("a", 100, 1_000_000)
+
+	alone := Aggregate([]Source{deep}, cfg, now).Confidence
+	paired := Aggregate([]Source{deep, src("b", 100, 1_000_000)}, cfg, now).Confidence
+	four := Aggregate([]Source{
+		deep, src("b", 100, 1_000_000), src("c", 100, 1_000_000), src("d", 100, 1_000_000),
+	}, cfg, now).Confidence
+
+	if !(alone < paired && paired < four) {
+		t.Fatalf("confidence must rise with independent sources: %d, %d, %d", alone, paired, four)
+	}
+	if four != 10_000 {
+		t.Errorf("four full sources = %d, want the ceiling", four)
+	}
+	// Half of confidence is reachable without any cross-check at all.
+	if alone < 5_000 {
+		t.Errorf("a single deep venue scored %d: the discount is unbounded again", alone)
 	}
 }
 

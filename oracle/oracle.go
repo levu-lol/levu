@@ -42,8 +42,19 @@ type Config struct {
 	// Below this many surviving sources the reading is unusable at any
 	// confidence.
 	MinSources int
-	// Source count at which coverage stops improving confidence.
+	// Effective source count at which cross-checking stops improving
+	// confidence.
 	TargetSources int
+	// CrossCheckWeight is the share of confidence that must be earned by having
+	// independent sources to compare against, in [0,1].
+	//
+	// The rest is available to a market with a single source, because the other
+	// two terms already say something true about it: depth says how expensive
+	// the price is to move, agreement says whether what we can see concurs.
+	// Cross-checking is a third, genuinely different question -- can a bad
+	// print be *detected* -- and it deserves a bounded discount rather than a
+	// factor that drives the whole reading to zero.
+	CrossCheckWeight wire.Fixed
 	// Total liquidity at which depth stops improving confidence.
 	TargetLiquidity wire.Fixed
 	// Liquidity at which a single source counts as one full, independent
@@ -62,6 +73,7 @@ func DefaultConfig() Config {
 		MaxDeviation:       wire.FixedRawInt64(50_000_000_000_000_000), // 0.05
 		MinSources:         2,
 		TargetSources:      4,
+		CrossCheckWeight:   wire.FixedRawInt64(500_000_000_000_000_000), // 0.5
 		TargetLiquidity:    wire.FixedWhole(1_000_000),
 		MinSourceLiquidity: wire.FixedWhole(250_000),
 	}
@@ -202,7 +214,34 @@ func Aggregate(sources []Source, cfg Config, now time.Time) Result {
 	}
 
 	res.Coverage, res.Depth, res.Agreement = coverage, depth, agreement
-	conf := coverage.Mul(depth).Mul(agreement).Mul(wire.FixedWhole(confidenceMax))
+
+	// Cross-checking is a bounded discount, not a third liquidity factor.
+	//
+	// Coverage and depth are both derived from the same liquidity: coverage
+	// weights each source by how much depth stands behind it, and depth sums
+	// that depth again. Multiplying them made confidence quadratic in a single
+	// number, and on a chain where the median market has two pools that was
+	// ruinous -- NVDA/usdg, with $2.3m of executable depth, scored 2,566 out of
+	// 10,000, and the median across every market that cleared the listing gates
+	// was 186. A single venue could not reach MinConfidence however deep it
+	// was, because coverage capped at 1/TargetSources. Nobody chose that; it
+	// fell out of the arithmetic.
+	//
+	// What the three terms should be saying is three different things. Depth:
+	// how expensive is this price to move. Agreement: do the sources we have
+	// concur. Cross-check: could a bad print be *detected* at all. Only the
+	// last is about source count, and it is worth a bounded discount rather
+	// than a factor that reaches zero -- so half of confidence is available to
+	// a single deep source, and the other half is earned by having something to
+	// compare against.
+	crossCheck := coverage
+	if w := cfg.CrossCheckWeight; w.IsPositive() {
+		if w.Cmp(one) > 0 {
+			w = one
+		}
+		crossCheck = one.Sub(w).Add(w.Mul(coverage))
+	}
+	conf := crossCheck.Mul(depth).Mul(agreement).Mul(wire.FixedWhole(confidenceMax))
 	res.Confidence = toBps(conf)
 	res.Healthy = len(kept) >= cfg.MinSources
 	if !res.Healthy {
