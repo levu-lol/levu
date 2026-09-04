@@ -139,6 +139,28 @@ tbody tr.sel td:first-child{box-shadow:inset 2px 0 0 var(--ember)}
 td .close{background:none;border:1px solid var(--rule);color:var(--text-2);border-radius:2px;
   padding:2px 8px;font-size:11px;cursor:pointer;font-family:"IBM Plex Mono",monospace}
 td .close:hover{border-color:var(--down);color:var(--down)}
+.chartwrap{position:relative;height:180px;margin:10px 0 4px;border:1px solid var(--rule);
+  border-radius:3px;overflow:hidden}
+.chartwrap canvas{position:absolute;inset:0;width:100%;height:100%;display:block}
+.chartnote{position:absolute;top:6px;left:8px;pointer-events:none}
+@media (max-width:720px){
+  .chartwrap{height:140px}
+  /* Nine columns do not fit a phone. The wrapper scrolls sideways so nothing
+     breaks, but sideways-scrolling a market list is not reading it: drop the
+     three a trader picking a market can do without, and keep price, stage, the
+     book that decides their leverage, and what they already hold. */
+  #mkt th:nth-child(4),#mkt td:nth-child(4),
+  #mkt th:nth-child(5),#mkt td:nth-child(5),
+  #mkt th:nth-child(8),#mkt td:nth-child(8){display:none}
+  .tblwrap{max-height:none}
+  .acct .wrap{gap:16px 18px}
+  .grid2{grid-template-columns:1fr}
+  .pane{padding:14px 14px}
+  .wrap{padding:0 14px}
+}
+td.closers{white-space:nowrap;text-align:right}
+td.closers .close+.close{margin-left:4px}
+td .close.half:hover{border-color:var(--text-2);color:var(--text)}
 .amt{display:flex;gap:8px;align-items:center}
 .amt input{flex:1}
 .pcts{display:flex;gap:6px;margin-top:8px}
@@ -188,6 +210,7 @@ footer{border-top:1px solid var(--rule);padding:18px 0;font-size:12px;color:var(
   <div class="cell"><span class="lbl">Free tUSDG</span><span class="v num" id="cash">—</span></div>
   <div class="cell"><span class="lbl">In lanes</span><span class="v num" id="posval">—</span></div>
   <div class="cell"><span class="lbl">Unrealised</span><span class="v num" id="upnl">—</span></div>
+  <div class="cell"><span class="lbl">Realised</span><span class="v num" id="realised">—</span></div>
   <div class="cell"><span class="lbl">Open</span><span class="v num" id="rpnl">—</span></div>
   <span class="spacer"></span>
   <div class="conn"><span class="dot" id="dot"></span><span id="connText">connecting…</span></div>
@@ -218,13 +241,14 @@ footer{border-top:1px solid var(--rule);padding:18px 0;font-size:12px;color:var(
       <button class="chip" id="fEth">ETH</button>
     </div>
     <div class="tblwrap">
-      <table>
+      <table id="mkt">
         <thead><tr>
           <th data-k="symbol">Market</th>
           <th data-k="px">Price</th>
-          <th data-k="chg">Since load</th>
+          <th data-k="state">Stage</th>
           <th data-k="volume_24h_usd">24h volume</th>
-          <th data-k="depth_2pct_usd">Depth ±2%</th>
+          <th data-k="depth_2pct_usd" title="Executable depth in the pool we price against — what it would cost to move the price">Venue ±2%</th>
+          <th data-k="book" title="Resting depth in our own book — what a forced close can eat">Our book</th>
           <th data-k="lev">Leverage</th>
           <th data-k="score">Health</th>
           <th data-k="posv">Position</th>
@@ -243,8 +267,12 @@ footer{border-top:1px solid var(--rule);padding:18px 0;font-size:12px;color:var(
         <span class="num" id="tChg"></span>
         <span class="mut num" id="tSym" style="margin-left:auto"></span>
       </div>
+      <div class="chartwrap"><canvas id="tChart"></canvas>
+        <span class="chartnote lbl" id="chartNote"></span></div>
+
       <div class="grid2">
-        <div class="cell"><span class="lbl">Executable depth ±2%</span><span class="v" id="tDepth">—</span></div>
+        <div class="cell"><span class="lbl" title="Executable depth in the pool we price against">Venue depth ±2%</span><span class="v" id="tDepth">—</span></div>
+        <div class="cell"><span class="lbl" title="Resting depth in our own book — what a forced close can eat">Our book ±2%</span><span class="v" id="tBook">—</span></div>
         <div class="cell"><span class="lbl">24h volume</span><span class="v" id="tVol">—</span></div>
         <div class="cell"><span class="lbl">Health score</span><span class="v" id="tScore">—</span></div>
         <div class="cell"><span class="lbl">Your position</span><span class="v" id="tPos">—</span></div>
@@ -314,7 +342,7 @@ footer{border-top:1px solid var(--rule);padding:18px 0;font-size:12px;color:var(
         <span class="lbl" id="tradeNote">—</span></div>
       <div class="tblwrap" style="max-height:210px">
         <table><thead><tr>
-          <th>Time</th><th>Market</th><th>Side</th><th>Qty</th><th>Price</th><th>Value</th>
+          <th>Time</th><th>Market</th><th>What</th><th>Qty</th><th>Price</th><th>Note</th>
         </tr></thead><tbody id="tradeRows"></tbody></table>
       </div>
     </div>

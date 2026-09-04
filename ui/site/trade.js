@@ -10,6 +10,8 @@
  * to find out what the engine does when real people push on it.
  */
 
+import { Chart } from "./chart.js";
+
 const SERVER_URL = "https://92-5-12-15.sslip.io";
 const POLL_MS = 4000;
 
@@ -34,7 +36,8 @@ let markets = [];          // merged with the server's live view
 let sel = null;
 let side = "buy";
 let account = null;        // { balance, positions } from the server
-let fills = [];            // this session's fills, for the tape
+let pnl = null;            // { granted, net_worth, realised, unrealised }
+let fills = [];            // read back from the server, so a refresh keeps them
 let openOrders = [];       // resting orders, read from the book each poll
 let sort = { k: "volume_24h_usd", dir: -1 };
 let wallet = null;         // { address, token }, once signed in
@@ -93,7 +96,15 @@ async function tick() {
   }).filter((m) => m.open);
 
   account = wallet ? { balance: st.balance || {}, positions: st.positions || {} } : null;
+  pnl = wallet ? st.pnl || null : null;
   if (wallet) {
+    // The round, from the server. Keeping it in a page-local array meant a
+    // refresh -- or a second tab -- showed a trader nothing they had done.
+    try {
+      fills = (await server("/api/fills?limit=100")).fills || [];
+    } catch {
+      fills = [];
+    }
     // From the book, every poll. A resting order fills when somebody else
     // trades, so a list kept here would show orders that are already gone.
     try {
@@ -244,23 +255,30 @@ async function submit() {
 /* Closing goes through the exchange like anything else: the lane reduces the
  * position against its own book, and refuses if it cannot. There is no local
  * shortcut that marks a position closed without the VM agreeing. */
-async function closePosition(m, btn) {
+async function closePosition(m, btn, fraction = 1) {
   if (!wallet) return;
+  const p = posOf(m);
+  if (!p) return;
   btn.disabled = true;
-  btn.textContent = "Closing…";
+  btn.textContent = fraction < 1 ? "Closing…" : "Closing…";
   try {
+    // The server clamps qty to the position, so a fill landing between this
+    // read and the request cannot turn a close into an order the other way.
+    const body = { token: wallet.token, pair: keyOf(m) };
+    if (fraction < 1) body.qty = Math.abs(p.size) * fraction;
     const out = await server("/api/close", {
       method: "POST",
-      body: JSON.stringify({ token: wallet.token, pair: keyOf(m) }),
+      body: JSON.stringify(body),
     });
     const bad = (out.receipts || []).find((r) => /^rejected/i.test(r));
     if (bad) throw new Error(bad.replace(/^rejected:\s*/i, ""));
-    note(`Closed ${m.symbol}.`);
+    note(fraction < 1 ? `Closed ${Math.round(fraction * 100)}% of ${m.symbol}.`
+                      : `Closed ${m.symbol}.`);
     await refresh();
   } catch (err) {
     note("Could not close: " + err.message);
     btn.disabled = false;
-    btn.textContent = "Close";
+    btn.textContent = btn.dataset.label || "Close";
   }
 }
 
@@ -277,6 +295,8 @@ function visible() {
   const k = sort.k;
   xs.sort((a, b) => {
     if (k === "symbol") return sort.dir * a.symbol.localeCompare(b.symbol);
+    // Stage is a word, and subtracting words gives NaN, which sorts nothing.
+    if (k === "state") return sort.dir * String(a.state).localeCompare(String(b.state));
     const get = (m) => k === "px" ? m.px
       : k === "lev" ? m.leverage
       : k === "posv" ? Math.abs((posOf(m) || {}).size || 0) * m.px
@@ -297,6 +317,7 @@ function render() {
       `<td>${fmtPx(m.px)}</td>` +
       `<td class="${m.state === "live" ? "up" : "mut"}">${m.state}</td>` +
       `<td class="mut">${fmtCompact(m.volume_24h_usd)}</td>` +
+      `<td class="mut">${fmtCompact(m.depth_2pct_usd)}</td>` +
       `<td class="mut">${fmtCompact(m.book)}</td>` +
       `<td class="${m.leverage > 1 ? "up" : "mut"}">${m.leverage > 0 ? m.leverage + "×" : "—"}</td>` +
       `<td class="mut">${(m.score || 0).toLocaleString()}</td>` +
@@ -311,17 +332,37 @@ function render() {
   let unreal = 0;
   for (const m of positions) unreal += Number(posOf(m).unrealised_pnl || 0);
 
+  // The server's own accounting where it has it: net worth minus what the
+  // faucet granted, split by the marks on what is still open. Adding the page's
+  // three numbers together was a second accounting of the same money.
+  const worth = pnl ? pnl.net_worth : freeBalance() + allocated() + unreal;
+  const un = pnl ? pnl.unrealised : unreal;
+  const re = pnl ? pnl.realised : 0;
+
   $("cash").textContent = wallet ? fmtUsd(freeBalance()) : "—";
   $("posval").textContent = wallet ? fmtUsd(allocated()) : "—";
-  $("equity").textContent = wallet ? fmtUsd(freeBalance() + allocated() + unreal) : "—";
-  $("upnl").textContent = wallet ? (unreal >= 0 ? "+" : "") + fmtUsd(unreal) : "—";
-  $("upnl").className = "v num " + (unreal > 0 ? "up" : unreal < 0 ? "down" : "");
+  $("equity").textContent = wallet ? fmtUsd(worth) : "—";
+  signed($("upnl"), wallet ? un : null);
+  signed($("realised"), wallet ? re : null);
   $("rpnl").textContent = String(positions.length);
 
   renderTicket();
+  loadChart(sel);
+  pushChartPoint(sel);
   renderPositions(positions);
   renderOpenOrders();
   renderFills();
+}
+
+// signed paints a gain or a loss, or an em dash when there is no account.
+function signed(el, v) {
+  if (v === null || v === undefined) {
+    el.textContent = "—";
+    el.className = "v num";
+    return;
+  }
+  el.textContent = (v >= 0 ? "+" : "") + fmtUsd(v);
+  el.className = "v num " + (v > 0.005 ? "up" : v < -0.005 ? "down" : "");
 }
 
 function renderTicket() {
@@ -331,7 +372,13 @@ function renderTicket() {
   $("tPx").textContent = fmtPx(sel.px);
   $("tChg").textContent = sel.state;
   $("tChg").className = "num " + (sel.state === "live" ? "up" : "mut");
-  $("tDepth").textContent = fmtCompact(sel.book);
+  // Two different numbers, and the difference is the whole engine: the venue's
+  // depth bounds what it costs to move the price, our book bounds what a
+  // forced close can eat. This column showed the second under the first's
+  // label, which is exactly the conflation the risk engine spent so long
+  // separating.
+  $("tDepth").textContent = fmtCompact(sel.depth_2pct_usd);
+  $("tBook").textContent = fmtCompact(sel.book);
   $("tVol").textContent = fmtCompact(sel.volume_24h_usd);
   $("tScore").textContent = (sel.score || 0).toLocaleString();
   $("tPos").textContent = p ? fmtQty(p.size) : "—";
@@ -351,8 +398,11 @@ function renderPositions(positions) {
       `<td>${fmtPx(p.entry_price)}</td><td>${fmtPx(m.px)}</td>` +
       `<td class="${p.liquidation > 0 ? "down" : "mut"}">${p.liquidation > 0 ? fmtPx(p.liquidation) : "—"}</td>` +
       `<td class="${pl > 0 ? "up" : pl < 0 ? "down" : "mut"}">${(pl >= 0 ? "+" : "") + fmtUsd(pl)}</td>` +
-      `<td><button class="close">Close</button></td>`;
+      `<td class="closers">` +
+        `<button class="close half" data-label="Half">Half</button>` +
+        `<button class="close" data-label="Close">Close</button></td>`;
     tr.onclick = (e) => {
+      if (e.target.classList.contains("half")) return closePosition(m, e.target, 0.5);
       if (e.target.classList.contains("close")) return closePosition(m, e.target);
       sel = m; render(); refreshQuote();
     };
@@ -403,16 +453,30 @@ async function cancelOrder(o, btn) {
   }
 }
 
+const KIND = {
+  fill: ["", "filled"],
+  close: ["mut", "closed"],
+  liquidation: ["down", "liquidated"],
+  refused: ["down", "refused"],
+};
+
 function renderFills() {
-  $("tradeNote").textContent = fills.length ? fills.length + " this session" : "none yet";
+  $("tradeNote").textContent = fills.length ? fills.length + " so far" : "none yet";
   $("tradeRows").replaceChildren(...fills.map((f) => {
     const tr = document.createElement("tr");
-    const [sym, q] = f.pair.split("/");
+    const [sym, q] = (f.pair || "/").split("/");
+    const [cls, label] = KIND[f.kind] || ["mut", f.kind];
+    const what = f.kind === "fill"
+      ? `<span class="${f.side === "buy" ? "up" : "down"}">${f.side === "buy" ? "long" : "short"}</span>`
+      : `<span class="${cls}">${label}</span>`;
     tr.innerHTML =
-      `<td class="mut">${new Date(f.t).toLocaleTimeString("en-GB")}</td>` +
+      `<td class="mut">${new Date(f.at).toLocaleTimeString("en-GB")}</td>` +
       `<td><span class="sym">${sym}</span><span class="q">${q}</span></td>` +
-      `<td class="${f.side === "buy" ? "up" : "down"}">${f.side === "buy" ? "long" : "short"}</td>` +
-      `<td>${fmtQty(f.qty)}</td><td>${fmtPx(f.px)}</td><td class="mut">seq ${f.seq}</td>`;
+      `<td>${what}</td>` +
+      `<td>${f.qty ? fmtQty(f.qty) : "—"}</td>` +
+      `<td>${f.price ? fmtPx(f.price) : "—"}</td>` +
+      `<td class="mut" title="${(f.reason || "").replace(/"/g, "&quot;")}">${
+        f.reason ? f.reason.slice(0, 40) : ""}</td>`;
     return tr;
   }));
   if (!fills.length) {
@@ -420,6 +484,74 @@ function renderFills() {
     tr.innerHTML = `<td colspan="6" class="empty">No orders yet.</td>`;
     $("tradeRows").replaceChildren(tr);
   }
+}
+
+/* ---- chart -------------------------------------------------------------- */
+
+/* The same component the terminal uses, on the market being traded.
+ *
+ * A trader deciding a direction with no price history in front of them is
+ * being asked to trade on a single number. paperd already keeps a day of every
+ * market on its own tick, so this is a fetch rather than a data problem. */
+let chart = null;
+let chartPair = null;
+const chartTicks = [];
+
+function ensureChart() {
+  if (chart) return chart;
+  const cv = $("tChart");
+  if (!cv) return null;
+  chart = new Chart(cv, {
+    bandBps: 0,
+    fmt: (v) => fmtPx(v),
+    fmtDepth: (v) => fmtCompact(v),
+  });
+  chart.setBand(false);
+  chart.setMark(false);
+  chart.setDepth(false);
+  chart.setTimeframe(60_000);
+  return chart;
+}
+
+async function loadChart(m) {
+  const c = ensureChart();
+  if (!c || !m) return;
+  const pair = keyOf(m);
+  if (pair === chartPair) return;
+  chartPair = pair;
+  chartTicks.length = 0;
+  c.setTicks([]);
+  $("chartNote").textContent = "loading…";
+  try {
+    const out = await server("/api/history?pair=" + encodeURIComponent(pair) + "&minutes=1440");
+    if (chartPair !== pair) return;          // the trader moved on while we waited
+    for (const [t, price] of out.points || []) {
+      if (price > 0) chartTicks.push(tickAt(t, price));
+    }
+  } catch {
+    // A market with no history is a shorter chart, not a broken page.
+  }
+  if (chartPair !== pair) return;
+  $("chartNote").textContent = chartTicks.length ? "" : "no history yet";
+  c.setTicks(chartTicks.slice());
+}
+
+const tickAt = (t, price) => ({
+  at: new Date(t), t, index: price, mark: price,
+  agg: { confidence: 0, used: [], rejected: [] },
+  sources: [], failed: [], depthTotal: 0, depth: 0, conf: 0,
+});
+
+/* One point per poll, so the chart keeps moving while the page is open. */
+function pushChartPoint(m) {
+  if (!chart || !m || keyOf(m) !== chartPair || !(m.px > 0)) return;
+  const t = Date.now();
+  const last = chartTicks[chartTicks.length - 1];
+  if (last && t - last.t < 1000) return;
+  chartTicks.push(tickAt(t, m.px));
+  if (chartTicks.length > 4000) chartTicks.shift();
+  $("chartNote").textContent = "";
+  chart.setTicks(chartTicks.slice());
 }
 
 function setConn(ok, text) {
