@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -31,6 +32,216 @@ type RPCChain struct {
 	RPC string
 	// HTTP is optional; a sane client with a deadline is used when nil.
 	HTTP *http.Client
+
+	// BatchWindow is how long a call waits for company before its request is
+	// sent. Zero disables coalescing; negative is treated as zero.
+	//
+	// The venues of a market are read concurrently -- one goroutine each -- so
+	// every pool of every lane arrives within a few hundred microseconds of its
+	// siblings. Sending them separately makes one HTTP request per contract
+	// read, which is how 57 markets becomes ~456 requests a tick.
+	BatchWindow time.Duration
+	// MaxBatch caps how many calls share a request.
+	//
+	// The endpoint refuses a batch by cost, not by length, and the budget is a
+	// bucket that recent traffic depletes: 40 eth_calls are accepted from a
+	// quiet client and refused from a busy one, while 60 eth_blockNumber calls
+	// are fine either way. So this is a starting size rather than a limit, and
+	// send() halves and retries whatever comes back refused.
+	MaxBatch int
+
+	start sync.Once
+	queue chan *pending
+}
+
+// pending is one call waiting for a batch to leave.
+type pending struct {
+	ctx    context.Context
+	method string
+	params []any
+	reply  chan pendingResult
+}
+
+type pendingResult struct {
+	raw json.RawMessage
+	err error
+}
+
+const (
+	defaultBatchWindow = 8 * time.Millisecond
+	defaultMaxBatch    = 20
+)
+
+func (c *RPCChain) window() time.Duration {
+	if c.BatchWindow < 0 {
+		return 0
+	}
+	if c.BatchWindow == 0 {
+		return defaultBatchWindow
+	}
+	return c.BatchWindow
+}
+
+func (c *RPCChain) maxBatch() int {
+	if c.MaxBatch <= 0 {
+		return defaultMaxBatch
+	}
+	return c.MaxBatch
+}
+
+// run collects calls into batches and sends them.
+//
+// A batch leaves when it is full or when the window since the first waiter
+// expires, whichever comes first. One goroutine, so batches are built and sent
+// in order and nothing races over the queue.
+func (c *RPCChain) run() {
+	for first := range c.queue {
+		batch := []*pending{first}
+		timer := time.NewTimer(c.window())
+		for len(batch) < c.maxBatch() {
+			select {
+			case p := <-c.queue:
+				batch = append(batch, p)
+				continue
+			case <-timer.C:
+			}
+			break
+		}
+		timer.Stop()
+		go c.send(batch)
+	}
+}
+
+// send issues a batch, halving and retrying whatever the endpoint refuses.
+//
+// A refusal is not a failure to report: nothing in a rejected batch was
+// executed, so the same calls can go again in smaller pieces. Halving rather
+// than retrying whole means a client that is over budget converges on a size
+// that fits instead of hammering the same wall, and a single call that is
+// genuinely refused still surfaces its error to exactly one caller.
+func (c *RPCChain) send(batch []*pending) {
+	if len(batch) > 1 {
+		if refused := c.trySend(batch); refused {
+			half := len(batch) / 2
+			var wg sync.WaitGroup
+			wg.Add(2)
+			go func() { defer wg.Done(); c.send(batch[:half]) }()
+			go func() { defer wg.Done(); c.send(batch[half:]) }()
+			wg.Wait()
+		}
+		return
+	}
+	// A single call that is still refused is not too large -- it is too soon.
+	// The endpoint enforces two different things and they need two different
+	// answers: a batch that costs too much should be split, and a client that
+	// is over its budget should wait. Splitting further here would spin.
+	for attempt := 0; ; attempt++ {
+		if !c.trySend(batch) {
+			return
+		}
+		if attempt >= 3 {
+			c.failAll(batch, fmt.Errorf(
+				"rpc: refused after %d attempts; the endpoint is rate limiting this client",
+				attempt+1))
+			return
+		}
+		wait := time.Duration(250<<attempt) * time.Millisecond
+		select {
+		case <-batch[0].ctx.Done():
+			c.failAll(batch, batch[0].ctx.Err())
+			return
+		case <-time.After(wait):
+		}
+	}
+}
+
+// trySend reports whether the whole batch was refused for being too expensive.
+// Any other outcome is delivered to the waiters and reported as handled.
+func (c *RPCChain) trySend(batch []*pending) (refused bool) {
+	reqs := make([]rpcReq, 0, len(batch))
+	for i, p := range batch {
+		reqs = append(reqs, rpcReq{Jsonrpc: "2.0", ID: i, Method: p.method, Params: p.params})
+	}
+	body, err := json.Marshal(reqs)
+	if err != nil {
+		c.failAll(batch, err)
+		return false
+	}
+
+	// The deadline is the longest any member is willing to wait; a member whose
+	// own context expires sooner gives up on its own.
+	ctx := context.Background()
+	var cancel context.CancelFunc
+	if d, ok := latestDeadline(batch); ok {
+		ctx, cancel = context.WithDeadline(ctx, d)
+		defer cancel()
+	}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.RPC, bytes.NewReader(body))
+	if err != nil {
+		c.failAll(batch, err)
+		return false
+	}
+	req.Header.Set("content-type", "application/json")
+	res, err := c.client().Do(req)
+	if err != nil {
+		c.failAll(batch, err)
+		return false
+	}
+	defer res.Body.Close()
+	if res.StatusCode == http.StatusTooManyRequests {
+		// Nothing in a refused batch was executed, so the caller is free to
+		// split it or to wait and send it again.
+		return true
+	}
+	if res.StatusCode != http.StatusOK {
+		c.failAll(batch, fmt.Errorf("rpc batch of %d: http %d", len(batch), res.StatusCode))
+		return false
+	}
+	var out []rpcResp
+	if err := json.NewDecoder(res.Body).Decode(&out); err != nil {
+		c.failAll(batch, fmt.Errorf("rpc batch: %w", err))
+		return false
+	}
+	// Responses may come back in any order, so they are matched by id and not
+	// by position. An id we did not send, or one missing, is a protocol error
+	// rather than something to paper over.
+	byID := make(map[int]rpcResp, len(out))
+	for _, r := range out {
+		byID[r.ID] = r
+	}
+	for i, p := range batch {
+		r, ok := byID[i]
+		switch {
+		case !ok:
+			p.reply <- pendingResult{err: fmt.Errorf("rpc batch: no answer for call %d", i)}
+		case r.Error != nil:
+			p.reply <- pendingResult{err: fmt.Errorf("%s: rpc %d: %s", p.method, r.Error.Code, r.Error.Message)}
+		default:
+			p.reply <- pendingResult{raw: r.Result}
+		}
+	}
+	return false
+}
+
+func (c *RPCChain) failAll(batch []*pending, err error) {
+	for _, p := range batch {
+		p.reply <- pendingResult{err: err}
+	}
+}
+
+func latestDeadline(batch []*pending) (time.Time, bool) {
+	var latest time.Time
+	for _, p := range batch {
+		d, ok := p.ctx.Deadline()
+		if !ok {
+			return time.Time{}, false // one member will wait forever
+		}
+		if d.After(latest) {
+			latest = d
+		}
+	}
+	return latest, !latest.IsZero()
 }
 
 func (c *RPCChain) client() *http.Client {
@@ -138,6 +349,7 @@ type rpcReq struct {
 }
 
 type rpcResp struct {
+	ID     int             `json:"id"`
 	Result json.RawMessage `json:"result"`
 	Error  *struct {
 		Code    int    `json:"code"`
@@ -145,7 +357,34 @@ type rpcResp struct {
 	} `json:"error"`
 }
 
+// do issues one call, batched with whatever else is in flight.
 func (c *RPCChain) do(ctx context.Context, method string, params []any, out any) error {
+	if c.window() > 0 {
+		c.start.Do(func() {
+			c.queue = make(chan *pending, 256)
+			go c.run()
+		})
+		p := &pending{ctx: ctx, method: method, params: params, reply: make(chan pendingResult, 1)}
+		select {
+		case c.queue <- p:
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+		select {
+		case r := <-p.reply:
+			if r.err != nil {
+				return r.err
+			}
+			return json.Unmarshal(r.raw, out)
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+	}
+	return c.doOne(ctx, method, params, out)
+}
+
+// doOne sends a call by itself, for callers that have disabled batching.
+func (c *RPCChain) doOne(ctx context.Context, method string, params []any, out any) error {
 	body, err := json.Marshal(rpcReq{Jsonrpc: "2.0", ID: 1, Method: method, Params: params})
 	if err != nil {
 		return err
