@@ -637,3 +637,62 @@ func TestMarginRisesWithSizeWhereLeverageCannot(t *testing.T) {
 			small, large)
 	}
 }
+
+// A thinner book must never permit a larger position.
+//
+// It did, and the effect was inverted: a market with a $50,000 book allowed
+// $2.5m while one with $250,000 allowed $12,500, because the bound that sizes
+// a position against the book it would be closed in was applied only to
+// leveraged lanes. Being fully collateralised means no loss for capital to
+// absorb; it does not mean the position can be got out of.
+func TestAThinnerBookNeverPermitsALargerPosition(t *testing.T) {
+	cfg := DefaultConfig()
+	base := Observation{
+		DepthWithin2Pct: 2_000_000, UnderwrittenCapital: 0,
+		Age: 60 * 24 * time.Hour, TopHolderShareBps: 1000, TopPoolShareBps: 4000,
+		OracleConfidence: 8_000, Volume24h: 800_000_000,
+		SpotTVL: 30_000_000, MarketCap: 500_000_000, RealisedVolBps: 5_000,
+	}
+	books := []int64{1_000, 10_000, 25_000, 50_000, 100_000}
+	var prev int64
+	for _, book := range books {
+		o := base
+		o.BookDepthWithin2Pct = book
+		s := Assess(o, cfg)
+		c, ok := Derive(o, s, cfg)
+		if !ok {
+			t.Fatalf("book %d refused the market: a thin book bounds size, it does not close a market", book)
+		}
+		if c.MaxPosition < prev {
+			t.Fatalf("book %d permits %d, less than the %d a thinner book permitted",
+				book, c.MaxPosition, prev)
+		}
+		// And never more than the share of the book it would close against.
+		if want := book * cfg.MaxPositionOfBookBps / BPS; c.MaxPosition > want {
+			t.Fatalf("book %d permits %d, more than the %d that book could close",
+				book, c.MaxPosition, want)
+		}
+		prev = c.MaxPosition
+	}
+}
+
+// Every rung stays openable however thin the book, because refusing to list is
+// a different decision from refusing a size.
+func TestAThinBookNeverClosesTheMarket(t *testing.T) {
+	cfg := DefaultConfig()
+	o := Observation{
+		DepthWithin2Pct: 2_000_000, BookDepthWithin2Pct: 1,
+		UnderwrittenCapital: 0, Age: 60 * 24 * time.Hour,
+		TopHolderShareBps: 1000, TopPoolShareBps: 4000,
+		OracleConfidence: 8_000, Volume24h: 800_000_000,
+		SpotTVL: 30_000_000, MarketCap: 500_000_000, RealisedVolBps: 5_000,
+	}
+	s := Assess(o, cfg)
+	c, ok := Derive(o, s, cfg)
+	if !ok {
+		t.Fatal("a market with almost no book of ours was refused entirely")
+	}
+	if c.MaxLeverage != 1 {
+		t.Fatalf("leverage %dx against a book of 1", c.MaxLeverage)
+	}
+}

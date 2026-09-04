@@ -901,7 +901,22 @@ func Derive(o Observation, s Score, cfg Config) (Capacity, bool) {
 	// Constant-liquidity slippage is a reasonable approximation while a position
 	// is a small part of the book and nonsense once it is not, so the position
 	// is held inside the range where the approximation holds.
-	if byBook := closable * cfg.MaxPositionOfBookBps / BPS; !spot && byBook > 0 && byBook < maxPosition {
+	// This bound applies to a spot lane too, and excluding it was a mistake.
+	//
+	// The reasoning for excluding it was that a fully collateralised position
+	// has no loss for capital to absorb, which is true and is about solvency.
+	// Closing is a different question: a position larger than the book cannot
+	// be got out of at any price, and being fully collateralised does not help
+	// with that. The effect was inverted -- a market with a $50,000 book
+	// permitted a $2.5m position while one with a $250,000 book permitted
+	// $12,500, because only the second was reaching this line.
+	//
+	// A book of exactly zero is left to the OI cap rather than pinned to zero.
+	// Not indulgence: a position can only be created by a fill, a fill needs a
+	// counterparty, and a counterparty is depth -- so the cap here is
+	// unreachable in that state, while pinning it to zero would refuse the
+	// resting orders that are the only way a book ever starts.
+	if byBook := closable * cfg.MaxPositionOfBookBps / BPS; byBook > 0 && byBook < maxPosition {
 		maxPosition = byBook
 	}
 
