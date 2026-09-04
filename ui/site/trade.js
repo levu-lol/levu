@@ -37,6 +37,7 @@ let account = null;        // { balance, positions } from the server
 let fills = [];            // this session's fills, for the tape
 let sort = { k: "volume_24h_usd", dir: -1 };
 let wallet = null;         // { address, token }, once signed in
+let orderType = "market";  // "market" crosses; "limit" rests
 let filter = { q: "", held: false, usdg: false, eth: false };
 
 const keyOf = (m) => m.symbol + "/" + m.quote;
@@ -124,7 +125,9 @@ async function refreshQuote() {
   }
   const mine = ++quoteSeq;
   try {
-    const q = await server(`/api/quote?pair=${encodeURIComponent(keyOf(sel))}&qty=${qty}`);
+    const limit = orderType === "limit" ? parseFloat($("limitPx").value) : 0;
+    const q = await server(`/api/quote?pair=${encodeURIComponent(keyOf(sel))}&qty=${qty}` +
+      `&side=${side}` + (limit > 0 ? `&price=${limit}` : ""));
     if (mine !== quoteSeq) return;      // a later keystroke already answered
     el.n.textContent = fmtUsd(q.notional);
     el.l.textContent = q.your_leverage > 0
@@ -182,24 +185,70 @@ async function submit() {
   go.disabled = true;
   go.textContent = "Sending…";
   try {
+    const limit = orderType === "limit" ? parseFloat($("limitPx").value) : 0;
+    if (orderType === "limit" && !(limit > 0)) throw new Error("Enter a limit price");
+
     const out = await server("/api/order", {
       method: "POST",
       body: JSON.stringify({
-        token: wallet.token, pair: keyOf(sel), side,
-        qty, market: true,
+        token: wallet.token, pair: keyOf(sel), side, qty,
+        market: orderType === "market",
+        ...(orderType === "limit" ? { price: limit } : {}),
       }),
     });
-    fills.unshift({
-      t: Date.now(), pair: keyOf(sel), side, qty,
-      px: sel.px, seq: out.seq,
-    });
-    fills = fills.slice(0, 60);
+
+    // "accepted" means the lane took the submission, not that anything
+    // happened. The receipts say what the VM did, and an order rejected for
+    // margin arrives inside a 200 -- which is how a rejection came to be drawn
+    // as a fill that then vanished on the next poll.
+    const receipts = out.receipts || [];
+    const bad = receipts.find((r) => /^rejected/i.test(r));
+    if (bad) throw new Error(bad.replace(/^rejected:\s*/i, ""));
+
+    const filled = receipts.find((r) => /^filled/i.test(r));
+    const resting = receipts.find((r) => /^resting/i.test(r));
+    if (filled) {
+      const at = parseFloat((filled.match(/@\s*([\d.]+)/) || [])[1]) || sel.px;
+      fills.unshift({ t: Date.now(), pair: keyOf(sel), side, qty, px: at, seq: out.seq });
+      fills = fills.slice(0, 60);
+      note(`Filled ${qty} ${sel.symbol} at ${fmtPx(at)}.`);
+    } else if (resting) {
+      note(`Resting on the book at ${fmtPx(limit)} — it fills when the market reaches it.`);
+    } else {
+      note(receipts.join("; ") || "The lane accepted the order.");
+    }
     $("amt").value = "";
-    note(`Order accepted at sequence ${out.seq}.`);
     await refresh();
   } catch (err) {
     note(err.message);
-    paintSubmit(null, err.message);
+  } finally {
+    // The button belongs to the quote, and only the quote repaints it. Without
+    // this it sat on "Sending…" after a perfectly good fill until the next
+    // keystroke -- which read as an order that never went anywhere.
+    await refreshQuote();
+  }
+}
+
+/* Closing goes through the exchange like anything else: the lane reduces the
+ * position against its own book, and refuses if it cannot. There is no local
+ * shortcut that marks a position closed without the VM agreeing. */
+async function closePosition(m, btn) {
+  if (!wallet) return;
+  btn.disabled = true;
+  btn.textContent = "Closing…";
+  try {
+    const out = await server("/api/close", {
+      method: "POST",
+      body: JSON.stringify({ token: wallet.token, pair: keyOf(m) }),
+    });
+    const bad = (out.receipts || []).find((r) => /^rejected/i.test(r));
+    if (bad) throw new Error(bad.replace(/^rejected:\s*/i, ""));
+    note(`Closed ${m.symbol}.`);
+    await refresh();
+  } catch (err) {
+    note("Could not close: " + err.message);
+    btn.disabled = false;
+    btn.textContent = "Close";
   }
 }
 
@@ -288,8 +337,12 @@ function renderPositions(positions) {
       `<td class="${p.size > 0 ? "up" : "down"}">${fmtQty(p.size)}</td>` +
       `<td>${fmtPx(p.entry_price)}</td><td>${fmtPx(m.px)}</td>` +
       `<td class="${p.liquidation > 0 ? "down" : "mut"}">${p.liquidation > 0 ? fmtPx(p.liquidation) : "—"}</td>` +
-      `<td class="${pl > 0 ? "up" : pl < 0 ? "down" : "mut"}">${(pl >= 0 ? "+" : "") + fmtUsd(pl)}</td>`;
-    tr.onclick = () => { sel = m; render(); refreshQuote(); };
+      `<td class="${pl > 0 ? "up" : pl < 0 ? "down" : "mut"}">${(pl >= 0 ? "+" : "") + fmtUsd(pl)}</td>` +
+      `<td><button class="close">Close</button></td>`;
+    tr.onclick = (e) => {
+      if (e.target.classList.contains("close")) return closePosition(m, e.target);
+      sel = m; render(); refreshQuote();
+    };
     return tr;
   }));
   if (!positions.length) {
@@ -331,6 +384,23 @@ async function refresh() {
 
 /* ---- wiring ------------------------------------------------------------- */
 
+let quoteTimer = null;
+
+function setOrderType(t) {
+  orderType = t;
+  $("tMarket").classList.toggle("on", t === "market");
+  $("tLimit").classList.toggle("on", t === "limit");
+  $("limitRow").hidden = t !== "limit";
+  if (t === "limit" && sel && !$("limitPx").value) $("limitPx").value = sel.px.toFixed(4);
+  refreshQuote();
+}
+$("tMarket").onclick = () => setOrderType("market");
+$("tLimit").onclick = () => setOrderType("limit");
+$("limitPx").addEventListener("input", () => {
+  clearTimeout(quoteTimer);
+  quoteTimer = setTimeout(refreshQuote, 220);
+});
+
 document.querySelectorAll(".side button").forEach((b) => {
   b.onclick = () => {
     side = b.dataset.side;
@@ -350,7 +420,7 @@ document.querySelectorAll(".pcts button").forEach((b) => {
     refreshQuote();
   };
 });
-let quoteTimer = null;
+
 $("amt").addEventListener("input", () => {
   clearTimeout(quoteTimer);
   quoteTimer = setTimeout(refreshQuote, 220);   // one quote per pause, not per keystroke
