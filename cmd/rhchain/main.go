@@ -33,7 +33,7 @@ func main() {
 	csvOut := flag.String("csv", "", "also append an observation row to this CSV")
 	flag.Parse()
 
-	chain := &indexer.CastChain{RPC: *rpc}
+	chain := &indexer.RPCChain{RPC: *rpc}
 	obs := indexer.New(chain)
 	ctx := context.Background()
 

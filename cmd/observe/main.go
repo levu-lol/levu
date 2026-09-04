@@ -43,7 +43,7 @@ func main() {
 		os.Exit(2)
 	}
 
-	obs := indexer.New(&indexer.CastChain{RPC: *rpc})
+	obs := indexer.New(&indexer.RPCChain{RPC: *rpc})
 	ctx := context.Background()
 
 	w := os.Stdout

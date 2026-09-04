@@ -37,7 +37,7 @@ func main() {
 	)
 	flag.Parse()
 
-	chain := &indexer.CastChain{RPC: *rpc}
+	chain := &indexer.RPCChain{RPC: *rpc}
 	obs := indexer.New(chain)
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer stop()
