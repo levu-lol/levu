@@ -190,9 +190,15 @@ func decodeReceipt(d *Decoder) (Receipt, error) {
 		err = get(fx(&r.RateLong), fx(&r.RateShort), fx(&r.IndexLong),
 			fx(&r.IndexShort), fx(&r.UtilisationLong), fx(&r.UtilisationShort))
 	case RRejected:
-		var c uint8
-		c, err = d.U8()
-		r.RejectCause = Reject(c)
+		// Whose intent was refused. A batch's receipts come back as one list
+		// and every caller waiting on that batch is handed all of them, so
+		// without this there is no way to tell whose rejection is whose, and
+		// one trader's refusal gets reported to another as their own.
+		if err = get(acct(&r.Account)); err == nil {
+			var c uint8
+			c, err = d.U8()
+			r.RejectCause = Reject(c)
+		}
 	default:
 		return r, fmt.Errorf("wire: unknown receipt discriminant %d", k)
 	}
