@@ -619,7 +619,11 @@ const wadPerUnit int64 = 1_000_000_000_000_000_000
 // The market's headline number is what the largest permitted position gets. A
 // trader asking for more than the book can carry does not get a warning and a
 // fill at the number they wanted; they get the number the book can carry.
-func (c Capacity) LeverageAt(notional int64) int64 {
+// rateAt is the initial margin a position of this size must post, in basis
+// points of notional.
+//
+// This is the primitive; leverage and margin are both views of it.
+func (c Capacity) rateAt(notional int64) int64 {
 	if c.InitialBps <= 0 {
 		return 0
 	}
@@ -644,10 +648,50 @@ func (c Capacity) LeverageAt(notional int64) int64 {
 		}
 		rate += extra.Int64()
 	}
+	return rate
+}
+
+// MarginAt is what a position of this size must post, in quote units.
+//
+// The honest quantity, and the one a trader can act on. Leverage is a rounded
+// view of it and stops being informative exactly where it matters most: on a
+// fully collateralised market the slope pushes the rate above 100%, which is
+// correct and safe, and which integer leverage can only render as zero.
+func (c Capacity) MarginAt(notional int64) int64 {
+	rate := c.rateAt(notional)
+	if rate <= 0 || notional <= 0 {
+		return 0
+	}
+	m := new(big.Int).Mul(big.NewInt(notional), big.NewInt(rate))
+	m.Quo(m, big.NewInt(BPS))
+	if !m.IsInt64() {
+		return 0
+	}
+	// Round up: a margin requirement rounded down is one the lane cannot cover.
+	if m.Int64()*BPS < notional*rate {
+		return m.Int64() + 1
+	}
+	return m.Int64()
+}
+
+// LeverageAt is the leverage a position of this size is offered.
+//
+// Zero means the size is not offerable at all. It does not mean "less than
+// one": a market on the spot rung posts full collateral plus whatever the
+// slope adds, which is a rate above 100% and a perfectly good trade. Integer
+// division reported that as zero, so every order on every spot market was
+// refused as unofferable -- which was every market on the chain.
+func (c Capacity) LeverageAt(notional int64) int64 {
+	rate := c.rateAt(notional)
 	if rate <= 0 {
 		return 0
 	}
-	return BPS / rate
+	if lev := BPS / rate; lev >= 1 {
+		return lev
+	}
+	// Payable, just not at a whole multiple. The extra margin is visible
+	// through MarginAt, which is where it belongs.
+	return 1
 }
 
 // AbsoluteMaxLeverage is the most leverage this configuration can ever produce,

@@ -581,3 +581,59 @@ func TestAnEmptyBookWithdrawsLeverageNotTheMarket(t *testing.T) {
 		prev = c2.MaxLeverage
 	}
 }
+
+// A spot market must be tradeable. The margin slope pushes a fully
+// collateralised rate above 100%, which is correct and safe; integer leverage
+// can only render that as zero, and zero was being read as "not offerable".
+//
+// Every market on Robinhood Chain is on the spot rung, so this refused every
+// order on the exchange.
+func TestASpotMarketIsOfferableAtEverySize(t *testing.T) {
+	cfg := DefaultConfig()
+	o := Observation{
+		DepthWithin2Pct: 2_000_000, BookDepthWithin2Pct: 15_000,
+		UnderwrittenCapital: 0, Age: 60 * 24 * time.Hour,
+		TopHolderShareBps: 1000, TopPoolShareBps: 4000,
+		OracleConfidence: 8_000, Volume24h: 800_000_000,
+		SpotTVL: 30_000_000, MarketCap: 500_000_000, RealisedVolBps: 5_000,
+	}
+	s := Assess(o, cfg)
+	c, ok := Derive(o, s, cfg)
+	if !ok {
+		t.Fatalf("fixture should list: %v %v", s.GateFailures, s.LeverageBlockers)
+	}
+	if c.MaxLeverage != 1 {
+		t.Fatalf("fixture should be on the spot rung, got %dx", c.MaxLeverage)
+	}
+
+	for _, notional := range []int64{25, 2_500, 25_000, 250_000} {
+		lev := c.LeverageAt(notional)
+		margin := c.MarginAt(notional)
+		if notional > c.MaxPosition {
+			continue // refused for size, which is a different thing
+		}
+		if lev < 1 {
+			t.Fatalf("notional %d reported %dx: a payable size read as unofferable",
+				notional, lev)
+		}
+		// And the margin must cover it: at least the notional, since the rate
+		// is at or above 100% here.
+		if margin < notional {
+			t.Fatalf("notional %d wants only %d margin on a 1x market", notional, margin)
+		}
+	}
+}
+
+// Margin is the quantity that keeps meaning something as size grows, so it
+// must rise even where leverage has flattened to its floor.
+func TestMarginRisesWithSizeWhereLeverageCannot(t *testing.T) {
+	c := Capacity{InitialBps: BPS, MarginSlopePerUnit: 1_000_000_000, MaxPosition: 1 << 40}
+	small, large := c.MarginAt(1_000), c.MarginAt(100_000)
+	if c.LeverageAt(1_000) != 1 || c.LeverageAt(100_000) != 1 {
+		t.Fatal("fixture should sit at the leverage floor for both")
+	}
+	if !(large > small*50) {
+		t.Fatalf("margin %d then %d: the slope is not reaching the figure traders see",
+			small, large)
+	}
+}
