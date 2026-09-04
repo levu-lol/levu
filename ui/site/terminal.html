@@ -269,7 +269,18 @@ const STALE_AFTER = 12000;   /* mark the price stale rather than let it lie */
 /* History only exists while the page is open, so this is a memory bound, not
  * a retention policy: 5,000 samples at ~2s is a bit under three hours, which
  * is more than the 15m timeframe needs to look like a chart. */
-const MAX = 5000;
+const MAX = 12000;
+/* Where the day before this page loaded comes from.
+ *
+ * The chart used to begin empty and fill in one point at a time, so a market's
+ * history was a fact about how long somebody had kept the tab open. paperd
+ * reads every market on its own tick and keeps a day of it; this asks for that
+ * before the first poll, and the chart opens with the day already drawn.
+ *
+ * Optional by design. If the server is unreachable the terminal still works
+ * exactly as it did -- it just starts empty again, which is a worse chart and
+ * not a broken page. */
+const HISTORY = "https://92-5-12-15.sslip.io";
 
 const $ = (id) => document.getElementById(id);
 const ticks = [];
@@ -648,6 +659,12 @@ async function select(m, { push = true } = {}) {
     u.searchParams.set("m", keyOf(m));
     history.replaceState(null, "", u);
   }
+  const n = await backfill(m);
+  if (market !== m) return;          // switched again while it was loading
+  if (n > 0) {
+    draw();
+    $("ticks").textContent = ticks.length;
+  }
   await boot();
 }
 
@@ -669,6 +686,50 @@ async function boot() {
   }
   setConn(true, "live · " + pools.length + " pools");
   run();
+}
+
+/* Seed the chart from the server's history, oldest first.
+ *
+ * Shaped like a tick so the chart and the tape cannot tell the difference, but
+ * with only the fields history actually carries: there is no per-venue
+ * breakdown behind an old point and inventing one would put made-up sources in
+ * the venue list. */
+async function backfill(m) {
+  const key = m.symbol + "/" + m.quote;
+  const url = HISTORY + "/api/history?pair=" + encodeURIComponent(key) + "&minutes=1440";
+  const ctl = new AbortController();
+  const timer = setTimeout(() => ctl.abort(), 8000);
+  let points;
+  try {
+    const res = await fetch(url, { signal: ctl.signal });
+    if (!res.ok) return 0;
+    points = (await res.json()).points;
+  } catch {
+    return 0;               // no history is not an error, just a shorter chart
+  } finally {
+    clearTimeout(timer);
+  }
+  if (!Array.isArray(points) || points.length === 0) return 0;
+
+  const seeded = [];
+  for (const [t, price, conf] of points) {
+    if (!(price > 0)) continue;
+    /* The fourth column is our own resting book, and this chart's depth pane
+       draws the venue's executable depth. They are different quantities and
+       putting one under the other's axis is precisely the conflation the risk
+       engine spent so long separating, so historic points carry no depth and
+       the pane simply starts where the live reads do. */
+    seeded.push({
+      at: new Date(t), t, index: price, mark: price,
+      agg: { confidence: conf, used: [], rejected: [] },
+      sources: [], failed: [], depthTotal: 0, depth: 0, conf,
+      latency: 0, historic: true,
+    });
+  }
+  if (seeded.length === 0) return 0;
+  ticks.splice(0, ticks.length, ...seeded.slice(-MAX));
+  lastPrice = seeded[seeded.length - 1].index;
+  return seeded.length;
 }
 
 (async function start() {
