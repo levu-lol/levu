@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"math/big"
 	"net/http"
@@ -79,7 +80,21 @@ func (c *RPCChain) rate() float64 {
 	return DefaultRate
 }
 
-// acquire blocks until this request may be sent, or ctx ends.
+// maxBacklog is how far ahead of now the pace may be booked. A request that
+// would have to wait longer than this is refused at once rather than queued.
+//
+// The first version of acquire() booked every caller a slot however far out,
+// and with demand above the pace every slot was later than the last: each
+// request waited past its own 9s deadline before it was ever sent, and the
+// whole price feed died at once -- 3,329 deadline errors, zero refusals,
+// every market's price exactly as old as the process. A pace has to shed load
+// it cannot carry, or it is just a slower way to fail everything.
+const maxBacklog = 2 * time.Second
+
+// ErrOverPace is returned when the client is asked for more than it will send.
+var ErrOverPace = errors.New("rpc: over pace; request dropped rather than queued past its deadline")
+
+// acquire blocks until this request may be sent, or refuses it, or ctx ends.
 func (c *RPCChain) acquire(ctx context.Context) error {
 	interval := time.Duration(float64(time.Second) / c.rate())
 	c.paceMu.Lock()
@@ -90,6 +105,15 @@ func (c *RPCChain) acquire(ctx context.Context) error {
 	}
 	if c.holdUntil.After(at) {
 		at = c.holdUntil
+	}
+	wait := at.Sub(now)
+	if wait > maxBacklog {
+		c.paceMu.Unlock()
+		return ErrOverPace
+	}
+	if d, ok := ctx.Deadline(); ok && at.After(d) {
+		c.paceMu.Unlock()
+		return ErrOverPace // it would time out anyway; say so now
 	}
 	c.next = at.Add(interval)
 	c.paceMu.Unlock()
@@ -145,7 +169,11 @@ type pendingResult struct {
 }
 
 const (
-	defaultBatchWindow = 8 * time.Millisecond
+	// Long enough to gather calls from dozens of independent goroutines that
+	// tick on their own clocks. At 8ms almost every call went out alone, so the
+	// pace was spent one call per request; at 100ms a request carries up to
+	// MaxBatch of them and the same pace moves twenty times the work.
+	defaultBatchWindow = 100 * time.Millisecond
 	defaultMaxBatch    = 20
 )
 
