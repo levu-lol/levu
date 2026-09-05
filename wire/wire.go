@@ -249,6 +249,20 @@ func (i RequestWithdrawal) encode(e *Encoder) {
 	e.U8(8).Bytes(i.Account[:]).Fixed(i.Amount)
 }
 
+// SettleWithdrawal pays out a requested withdrawal: the collateral leaves.
+//
+// RequestWithdrawal only records the request, freezing the amount out of free
+// margin until a settlement layer pays it. On a lane running without one that
+// is a ratchet -- the collateral is frozen and never released -- so the caller
+// has to perform the settlement the hub would.
+type SettleWithdrawal struct {
+	Account Account
+}
+
+func (i SettleWithdrawal) encode(e *Encoder) {
+	e.U8(13).Bytes(i.Account[:])
+}
+
 func encodeParams(e *Encoder, p RiskParams) {
 	e.Fixed(p.InitialMarginLong).
 		Fixed(p.InitialMarginShort).

@@ -15,6 +15,7 @@ const (
 	RLiquidated           ReceiptKind = 7
 	RRiskParamsUpdated    ReceiptKind = 8
 	RWithdrawalRequested  ReceiptKind = 9
+	RWithdrawalSettled    ReceiptKind = 16
 	RRejected             ReceiptKind = 10
 	RInsuranceExhausted   ReceiptKind = 11
 	RUnderwritten         ReceiptKind = 12
@@ -189,6 +190,8 @@ func decodeReceipt(d *Decoder) (Receipt, error) {
 	case RRentAccrued:
 		err = get(fx(&r.RateLong), fx(&r.RateShort), fx(&r.IndexLong),
 			fx(&r.IndexShort), fx(&r.UtilisationLong), fx(&r.UtilisationShort))
+	case RWithdrawalSettled:
+		err = get(acct(&r.Account), fx(&r.Amount))
 	case RRejected:
 		// Whose intent was refused. A batch's receipts come back as one list
 		// and every caller waiting on that batch is handed all of them, so
