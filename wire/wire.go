@@ -263,6 +263,33 @@ func (i SettleWithdrawal) encode(e *Encoder) {
 	e.U8(13).Bytes(i.Account[:])
 }
 
+// SetDelegate lends trading authority to another key, up to a cumulative
+// notional budget and until a lane sequence.
+//
+// A delegate may place and cancel orders for the principal and nothing else:
+// it cannot withdraw, cannot underwrite, and cannot delegate onwards. Only the
+// principal may set one.
+type SetDelegate struct {
+	Principal  Account
+	Delegate   Account
+	Cap        Fixed
+	ExpiresSeq uint64
+}
+
+func (i SetDelegate) encode(e *Encoder) {
+	e.U8(14).Bytes(i.Principal[:]).Bytes(i.Delegate[:]).Fixed(i.Cap).U64(i.ExpiresSeq)
+}
+
+// RevokeDelegate withdraws that authority immediately.
+type RevokeDelegate struct {
+	Principal Account
+	Delegate  Account
+}
+
+func (i RevokeDelegate) encode(e *Encoder) {
+	e.U8(15).Bytes(i.Principal[:]).Bytes(i.Delegate[:])
+}
+
 func encodeParams(e *Encoder, p RiskParams) {
 	e.Fixed(p.InitialMarginLong).
 		Fixed(p.InitialMarginShort).
@@ -313,6 +340,16 @@ type SequencedIntent struct {
 	// and not only that it was ordered. Adding it after users held proofs would
 	// move every leaf they had proved against.
 	Sig *[65]byte
+	// Actor is which key authorised this intent, when it was not the account
+	// the intent names.
+	//
+	// nil means the sequencer vouched for it. Non-nil means that key signed:
+	// either the account itself, or one it has delegated trading authority to.
+	// The VM does not recover this from Sig -- recovery is secp256k1 and the VM
+	// compiles as a zkVM guest, where every dependency is proving surface. The
+	// sequencer recovers and states it; the signature is committed either way,
+	// so a replayer can check the two agree without the VM paying for it.
+	Actor *Account
 }
 
 // ---------------------------------------------------------------------------
@@ -351,8 +388,8 @@ func EncodeApplyBatch(e *Encoder, marketID uint32, batch []SequencedIntent) []by
 	return e.buf
 }
 
-// encode writes one sequenced intent: seq, then an optional signature, then
-// the intent. The layout is pinned against the Rust decoder in
+// encode writes one sequenced intent: seq, an optional signature, an optional
+// actor, then the intent. The layout is pinned against the Rust decoder in
 // TestTheSequencedIntentEnvelopeMatchesRust; a field added on one side and not
 // the other forks the transaction root silently.
 func (si SequencedIntent) encode(e *Encoder) {
@@ -361,6 +398,11 @@ func (si SequencedIntent) encode(e *Encoder) {
 		e.U8(0)
 	} else {
 		e.U8(1).Bytes(si.Sig[:])
+	}
+	if si.Actor == nil {
+		e.U8(0)
+	} else {
+		e.U8(1).Bytes(si.Actor[:])
 	}
 	si.Intent.encode(e)
 }

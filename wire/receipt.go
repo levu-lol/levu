@@ -16,6 +16,8 @@ const (
 	RRiskParamsUpdated    ReceiptKind = 8
 	RWithdrawalRequested  ReceiptKind = 9
 	RWithdrawalSettled    ReceiptKind = 16
+	RDelegateSet          ReceiptKind = 17
+	RDelegateRevoked      ReceiptKind = 18
 	RRejected             ReceiptKind = 10
 	RInsuranceExhausted   ReceiptKind = 11
 	RUnderwritten         ReceiptKind = 12
@@ -103,6 +105,10 @@ type Receipt struct {
 	BadDebt     Fixed
 	Refunded    Fixed
 	RejectCause Reject
+
+	// Delegation. Account is the principal.
+	Delegate   Account
+	ExpiresSeq uint64
 
 	Uncovered      Fixed
 	TotalUncovered Fixed
@@ -192,6 +198,12 @@ func decodeReceipt(d *Decoder) (Receipt, error) {
 			fx(&r.IndexShort), fx(&r.UtilisationLong), fx(&r.UtilisationShort))
 	case RWithdrawalSettled:
 		err = get(acct(&r.Account), fx(&r.Amount))
+	case RDelegateSet:
+		if err = get(acct(&r.Account), acct(&r.Delegate), fx(&r.Amount)); err == nil {
+			r.ExpiresSeq, err = d.U64()
+		}
+	case RDelegateRevoked:
+		err = get(acct(&r.Account), acct(&r.Delegate))
 	case RRejected:
 		// Whose intent was refused. A batch's receipts come back as one list
 		// and every caller waiting on that batch is handed all of them, so
