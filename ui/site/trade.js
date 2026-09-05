@@ -340,6 +340,13 @@ function render() {
   const re = pnl ? pnl.realised : 0;
 
   $("cash").textContent = wallet ? fmtUsd(freeBalance()) : "—";
+  // The wallet bar's own balance. It was written only by refreshWallet(),
+  // which runs after a claim or a connect and nowhere else -- so a reload
+  // showed "—" beside a strip that said $1,000.00, for the same account, on
+  // the same screen. Everything a trader can see is painted here, every tick.
+  $("walletBal").textContent = wallet
+    ? Number(freeBalance()).toLocaleString("en-US", { maximumFractionDigits: 2 })
+    : "—";
   $("posval").textContent = wallet ? fmtUsd(allocated()) : "—";
   $("equity").textContent = wallet ? fmtUsd(worth) : "—";
   signed($("upnl"), wallet ? un : null);
