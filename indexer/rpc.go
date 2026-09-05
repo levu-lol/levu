@@ -69,9 +69,16 @@ type RPCChain struct {
 	refusals  int       // consecutive, for the backoff
 }
 
-// DefaultRate is the request pace when none is configured: what the public
-// Robinhood Chain endpoint has sustained without refusing.
-const DefaultRate = 4.0
+// DefaultRate is the request pace when none is configured.
+//
+// Measured, not guessed. 4/s was the guess, and on 2026-09-05 it shed 80, 39,
+// 0, 102 and 0 calls in consecutive two-minute windows against fifty-seven
+// markets: the cold cohort's 15s ticks arrive as bursts of ~100 calls, and a
+// two-second backlog at 4/s holds eight requests. 25/s ran fifteen minutes at
+// the same demand with zero refusals and zero sheds. The hold on 429 is what
+// protects the endpoint if it tightens; the pace only has to be high enough
+// not to starve our own feed.
+const DefaultRate = 25.0
 
 func (c *RPCChain) rate() float64 {
 	if c.Rate > 0 {
