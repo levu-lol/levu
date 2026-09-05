@@ -284,6 +284,40 @@ async function closePosition(m, btn, fraction = 1) {
 
 /* ---- rendering ---------------------------------------------------------- */
 
+/* The engine's lifecycle names, said the way a trader hears them.
+ *
+ * "preparing" is the engine's word for a market that trades at 1x and has not
+ * yet held its health score above the bar for the 30-minute dwell that earns
+ * leverage. To a trader it reads as "not ready to trade", which is false:
+ * every such market fills orders now. The ticket even contradicted it,
+ * showing "SPOT · 1×" beside the word "preparing". What a trader wants to
+ * know is what they can do here, so that is what the label says. */
+function stage(m) {
+  const lev = m.leverage > 1 ? m.leverage + "×" : "1×";
+  switch (m.state) {
+    case "live":
+      return { text: "leverage " + lev, cls: "up",
+        title: "Leverage market: held its health score above the bar for 30 minutes." };
+    case "degraded":
+      return { text: "leverage " + lev + " · capped", cls: "up",
+        title: "Leverage is capped while the market's health is below par." };
+    case "preparing":
+      return { text: "spot 1×", cls: "mut",
+        title: "Trades at 1× now. Offers leverage once its health score holds above " +
+               (m.blockers && m.blockers.length ? "the bar; currently: " + m.blockers[0] : "the bar for 30 minutes.") };
+    case "spot-only":
+      return { text: "spot 1× · demoted", cls: "mut",
+        title: "Lost its leverage until the health score recovers. Still trades at 1×." };
+    case "reduce-only":
+      return { text: "closing only", cls: "down",
+        title: "No new exposure. Existing positions can be reduced." };
+    case "closed":
+      return { text: "closed", cls: "down", title: "Delisted." };
+    default:
+      return { text: m.state || "—", cls: "mut", title: "" };
+  }
+}
+
 function visible() {
   const xs = markets.filter((m) => {
     if (filter.q && !m.symbol.toLowerCase().includes(filter.q)) return false;
@@ -315,7 +349,7 @@ function render() {
     tr.innerHTML =
       `<td><span class="sym">${m.symbol}</span><span class="q">${m.quote}</span></td>` +
       `<td>${fmtPx(m.px)}</td>` +
-      `<td class="${m.state === "live" ? "up" : "mut"}">${m.state}</td>` +
+      `<td class="${stage(m).cls}" title="${stage(m).title.replace(/"/g, "&quot;")}">${stage(m).text}</td>` +
       `<td class="mut">${fmtCompact(m.volume_24h_usd)}</td>` +
       `<td class="mut">${fmtCompact(m.depth_2pct_usd)}</td>` +
       `<td class="mut">${fmtCompact(m.book)}</td>` +
@@ -378,8 +412,9 @@ function renderTicket() {
   const p = posOf(sel);
   $("tSym").textContent = sel.symbol + " / " + sel.quote.toUpperCase();
   $("tPx").textContent = fmtPx(sel.px);
-  $("tChg").textContent = sel.state;
-  $("tChg").className = "num " + (sel.state === "live" ? "up" : "mut");
+  $("tChg").textContent = stage(sel).text;
+  $("tChg").className = "num " + stage(sel).cls;
+  $("tChg").title = stage(sel).title;
   // Two different numbers, and the difference is the whole engine: the venue's
   // depth bounds what it costs to move the price, our book bounds what a
   // forced close can eat. This column showed the second under the first's
