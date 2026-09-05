@@ -696,3 +696,31 @@ func TestAThinBookNeverClosesTheMarket(t *testing.T) {
 		t.Fatalf("leverage %dx against a book of 1", c.MaxLeverage)
 	}
 }
+
+// Funding must never be less than what the VM will ask.
+//
+// The VM computes initial margin as notional * (base + notional*slope*2) in
+// fixed point. At paper sizes the slope term is a fraction of a basis point,
+// and an integer-bps computation truncated it to zero: 105 funded against a
+// requirement of 105.0037, and "insufficient margin" on a fresh account.
+func TestMarginAtIsNeverBelowTheVMsRequirement(t *testing.T) {
+	c := Capacity{Openable: true, MaxLeverage: 1, InitialBps: BPS, MaintenanceBps: 150,
+		MarginSlopePerUnit: 166_666_666_666} // the live HIMS/usdg capacity
+	for _, n := range []int64{1, 20, 105, 210, 999, 6000} {
+		got := c.MarginAt(n)
+		// exact, as the VM has it
+		slope := float64(c.MarginSlopePerUnit) / 1e18
+		exact := float64(n) * (1 + float64(n)*slope*2)
+		if float64(got) < exact {
+			t.Fatalf("MarginAt(%d) = %d, below the VM's %.6f", n, got, exact)
+		}
+		if float64(got) > exact+1 {
+			t.Fatalf("MarginAt(%d) = %d, over-funds the VM's %.6f by more than the rounding unit", n, got, exact)
+		}
+	}
+	// And with no slope it is still exactly the notional at 1x.
+	c.MarginSlopePerUnit = 0
+	if got := c.MarginAt(105); got != 105 {
+		t.Fatalf("MarginAt(105) at 1x with no slope = %d, want 105", got)
+	}
+}

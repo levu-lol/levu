@@ -658,20 +658,30 @@ func (c Capacity) rateAt(notional int64) int64 {
 // fully collateralised market the slope pushes the rate above 100%, which is
 // correct and safe, and which integer leverage can only render as zero.
 func (c Capacity) MarginAt(notional int64) int64 {
-	rate := c.rateAt(notional)
-	if rate <= 0 || notional <= 0 {
+	if c.InitialBps <= 0 || notional <= 0 {
 		return 0
 	}
-	m := new(big.Int).Mul(big.NewInt(notional), big.NewInt(rate))
-	m.Quo(m, big.NewInt(BPS))
-	if !m.IsInt64() {
-		return 0
+	// In the VM's arithmetic, not an approximation of it.
+	//
+	// rateAt works in integer basis points, and the slope term at a typical
+	// paper size is a fraction of one: 105 notional at a slope of 1.67e-7 per
+	// unit adds 0.00035bps, which rateAt truncates to nothing. The VM applies
+	// the same slope in fixed point and wanted 105.0037 against the 105 this
+	// used to answer -- and refused the order. Mirror RiskParams::initial_rate_for
+	// exactly: rate = base + notional*slope*2, margin = notional*rate, then
+	// round up to whole units, so what the lane is funded is never less than
+	// what the VM will ask.
+	n := wire.FixedWhole(notional)
+	rate := bpsToFixed(c.InitialBps)
+	if c.MarginSlopePerUnit > 0 {
+		rate = rate.Add(n.Mul(wire.FixedRawInt64(c.MarginSlopePerUnit)).Mul(wire.FixedWhole(2)))
 	}
-	// Round up: a margin requirement rounded down is one the lane cannot cover.
-	if m.Int64()*BPS < notional*rate {
-		return m.Int64() + 1
+	m := n.Mul(rate)
+	whole := m.Whole()
+	if wire.FixedWhole(whole).Cmp(m) < 0 {
+		whole++
 	}
-	return m.Int64()
+	return whole
 }
 
 // LeverageAt is the leverage a position of this size is offered.
