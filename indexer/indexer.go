@@ -18,6 +18,7 @@ import (
 	"fmt"
 	"math"
 	"math/big"
+	"sync"
 	"time"
 
 	"github.com/levu-lol/levu/health"
@@ -68,6 +69,14 @@ var depthFractionWithin2Pct = 1 - 1/math.Sqrt(1.02)
 
 // Observer turns pool state into health observations.
 type Observer struct {
+	// liquidity() per pool, cached briefly. A pool's in-range liquidity moves
+	// on mints and burns, not on every swap, and the oracle only uses it as a
+	// weight between venues; reading it on every 3s tick doubled this
+	// exchange's call rate against a public endpoint for a number that was the
+	// same 99% of the time. slot0 is still read every tick: that is the price.
+	liqMu sync.Mutex
+	liq   map[string]cachedLiquidity
+
 	chain Chain
 	// VolumeWindow is how far back swap logs are summed.
 	VolumeWindow time.Duration
@@ -203,4 +212,31 @@ func toUnits(v *big.Int) int64 {
 		return math.MaxInt64
 	}
 	return q.Int64()
+}
+
+type cachedLiquidity struct {
+	val *big.Int
+	at  time.Time
+}
+
+// liquidityTTL is how long a pool's liquidity reading is reused.
+const liquidityTTL = 30 * time.Second
+
+func (o *Observer) cachedLiq(pool string) (*big.Int, bool) {
+	o.liqMu.Lock()
+	defer o.liqMu.Unlock()
+	e, ok := o.liq[pool]
+	if !ok || time.Since(e.at) > liquidityTTL {
+		return nil, false
+	}
+	return e.val, true
+}
+
+func (o *Observer) rememberLiq(pool string, v *big.Int) {
+	o.liqMu.Lock()
+	defer o.liqMu.Unlock()
+	if o.liq == nil {
+		o.liq = map[string]cachedLiquidity{}
+	}
+	o.liq[pool] = cachedLiquidity{val: v, at: time.Now()}
 }

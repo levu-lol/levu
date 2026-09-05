@@ -50,8 +50,85 @@ type RPCChain struct {
 	// send() halves and retries whatever comes back refused.
 	MaxBatch int
 
+	// Rate is the most requests per second this client will send, batched or
+	// not. Zero means DefaultRate. A refusal (429) additionally holds every
+	// outbound request for a backoff that honours Retry-After, so one refused
+	// batch is answered by waiting rather than by splitting into two, four,
+	// eight requests against the very limiter that refused it -- which is what
+	// this client did on 2026-09-05, all afternoon, at 200-570 refusals per
+	// ten minutes, leaving half the markets on a stale price.
+	Rate float64
+
 	start sync.Once
 	queue chan *pending
+
+	paceMu    sync.Mutex
+	next      time.Time // when the next request may be sent
+	holdUntil time.Time // set on a refusal
+	refusals  int       // consecutive, for the backoff
+}
+
+// DefaultRate is the request pace when none is configured: what the public
+// Robinhood Chain endpoint has sustained without refusing.
+const DefaultRate = 4.0
+
+func (c *RPCChain) rate() float64 {
+	if c.Rate > 0 {
+		return c.Rate
+	}
+	return DefaultRate
+}
+
+// acquire blocks until this request may be sent, or ctx ends.
+func (c *RPCChain) acquire(ctx context.Context) error {
+	interval := time.Duration(float64(time.Second) / c.rate())
+	c.paceMu.Lock()
+	now := time.Now()
+	at := c.next
+	if at.Before(now) {
+		at = now
+	}
+	if c.holdUntil.After(at) {
+		at = c.holdUntil
+	}
+	c.next = at.Add(interval)
+	c.paceMu.Unlock()
+	if d := time.Until(at); d > 0 {
+		select {
+		case <-time.After(d):
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+	}
+	return nil
+}
+
+// refused records a 429: hold everything, longer each consecutive time.
+func (c *RPCChain) refused(retryAfter time.Duration) {
+	c.paceMu.Lock()
+	defer c.paceMu.Unlock()
+	c.refusals++
+	back := time.Duration(500<<min(c.refusals-1, 4)) * time.Millisecond // 0.5s .. 8s
+	if retryAfter > back {
+		back = retryAfter
+	}
+	if until := time.Now().Add(back); until.After(c.holdUntil) {
+		c.holdUntil = until
+	}
+}
+
+func (c *RPCChain) succeeded() {
+	c.paceMu.Lock()
+	c.refusals = 0
+	c.paceMu.Unlock()
+}
+
+// Hold reports how long outbound requests are currently paused, for whoever is
+// deciding whether to complain about a stale price.
+func (c *RPCChain) Hold() time.Duration {
+	c.paceMu.Lock()
+	defer c.paceMu.Unlock()
+	return time.Until(c.holdUntil)
 }
 
 // pending is one call waiting for a batch to leave.
@@ -177,6 +254,10 @@ func (c *RPCChain) trySend(batch []*pending) (refused bool) {
 		defer cancel()
 	}
 
+	if err := c.acquire(ctx); err != nil {
+		c.failAll(batch, err)
+		return false
+	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.RPC, bytes.NewReader(body))
 	if err != nil {
 		c.failAll(batch, err)
@@ -190,10 +271,19 @@ func (c *RPCChain) trySend(batch []*pending) (refused bool) {
 	}
 	defer res.Body.Close()
 	if res.StatusCode == http.StatusTooManyRequests {
-		// Nothing in a refused batch was executed, so the caller is free to
-		// split it or to wait and send it again.
+		// Nothing in a refused batch was executed. Hold every outbound request
+		// for a backoff -- "too soon" is a property of the client, not of this
+		// batch -- and then let the caller split or retry under that pace.
+		var ra time.Duration
+		if v := res.Header.Get("Retry-After"); v != "" {
+			if n, err := strconv.Atoi(v); err == nil {
+				ra = time.Duration(n) * time.Second
+			}
+		}
+		c.refused(ra)
 		return true
 	}
+	c.succeeded()
 	if res.StatusCode != http.StatusOK {
 		c.failAll(batch, fmt.Errorf("rpc batch of %d: http %d", len(batch), res.StatusCode))
 		return false
@@ -384,32 +474,23 @@ func (c *RPCChain) do(ctx context.Context, method string, params []any, out any)
 }
 
 // doOne sends a call by itself, for callers that have disabled batching.
+//
+// Through the same send path as a batch: a batch of one. The first version
+// had its own HTTP round trip, which meant its own handling of everything --
+// and it had none for 429: an unbatched caller was simply told "http 429"
+// while the batched path paced, held and retried. One path, one behaviour.
 func (c *RPCChain) doOne(ctx context.Context, method string, params []any, out any) error {
-	body, err := json.Marshal(rpcReq{Jsonrpc: "2.0", ID: 1, Method: method, Params: params})
-	if err != nil {
-		return err
+	p := &pending{ctx: ctx, method: method, params: params, reply: make(chan pendingResult, 1)}
+	c.send([]*pending{p})
+	select {
+	case r := <-p.reply:
+		if r.err != nil {
+			return r.err
+		}
+		return json.Unmarshal(r.raw, out)
+	case <-ctx.Done():
+		return ctx.Err()
 	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.RPC, bytes.NewReader(body))
-	if err != nil {
-		return err
-	}
-	req.Header.Set("content-type", "application/json")
-	res, err := c.client().Do(req)
-	if err != nil {
-		return fmt.Errorf("%s: %w", method, err)
-	}
-	defer res.Body.Close()
-	if res.StatusCode != http.StatusOK {
-		return fmt.Errorf("%s: http %d", method, res.StatusCode)
-	}
-	var r rpcResp
-	if err := json.NewDecoder(res.Body).Decode(&r); err != nil {
-		return fmt.Errorf("%s: %w", method, err)
-	}
-	if r.Error != nil {
-		return fmt.Errorf("%s: rpc %d: %s", method, r.Error.Code, r.Error.Message)
-	}
-	return json.Unmarshal(r.Result, out)
 }
 
 func (c *RPCChain) Call(ctx context.Context, to, sig string, args ...string) ([]string, error) {

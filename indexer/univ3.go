@@ -69,13 +69,16 @@ func (o *Observer) ReadV3Price(ctx context.Context, p V3Pool) (*V3State, error) 
 	if !ok {
 		return nil, fmt.Errorf("parse sqrtPriceX96 %q", slot0[0])
 	}
-	liq, err := o.chain.Call(ctx, p.Pool, "liquidity()(uint128)")
-	if err != nil || len(liq) == 0 {
-		return nil, fmt.Errorf("liquidity: %w", err)
-	}
-	l, ok := new(big.Int).SetString(liq[0], 10)
+	l, ok := o.cachedLiq(p.Pool)
 	if !ok {
-		return nil, fmt.Errorf("parse liquidity %q", liq[0])
+		liq, err := o.chain.Call(ctx, p.Pool, "liquidity()(uint128)")
+		if err != nil || len(liq) == 0 {
+			return nil, fmt.Errorf("liquidity: %w", err)
+		}
+		if l, ok = new(big.Int).SetString(liq[0], 10); !ok {
+			return nil, fmt.Errorf("parse liquidity %q", liq[0])
+		}
+		o.rememberLiq(p.Pool, l)
 	}
 	return &V3State{
 		SqrtPriceX96: sqrtP, Liquidity: l,
@@ -94,13 +97,16 @@ func (o *Observer) ReadV3(ctx context.Context, p V3Pool) (*V3State, error) {
 		return nil, fmt.Errorf("parse sqrtPriceX96 %q", slot0[0])
 	}
 
-	liq, err := o.chain.Call(ctx, p.Pool, "liquidity()(uint128)")
-	if err != nil || len(liq) == 0 {
-		return nil, fmt.Errorf("liquidity: %w", err)
-	}
-	l, ok := new(big.Int).SetString(liq[0], 10)
+	l, ok := o.cachedLiq(p.Pool)
 	if !ok {
-		return nil, fmt.Errorf("parse liquidity %q", liq[0])
+		liq, err := o.chain.Call(ctx, p.Pool, "liquidity()(uint128)")
+		if err != nil || len(liq) == 0 {
+			return nil, fmt.Errorf("liquidity: %w", err)
+		}
+		if l, ok = new(big.Int).SetString(liq[0], 10); !ok {
+			return nil, fmt.Errorf("parse liquidity %q", liq[0])
+		}
+		o.rememberLiq(p.Pool, l)
 	}
 
 	bal := func(token string) (*big.Int, error) {
