@@ -309,7 +309,7 @@ const money = (v, dp = 2) => !isFinite(v) ? "—"
 const usd = (v) => !isFinite(v) || v <= 0 ? "—"
   : v >= 1e6 ? "$" + (v / 1e6).toFixed(1) + "M" : "$" + Math.round(v / 1e3) + "k";
 
-let pools = [], ticks = [], last = null, misses = 0;
+let pools = [], ticks = [], last = null, misses = 0, timer = null;
 
 async function discover() {
   const calls = FEES.map((f) => ({ to: FACTORY, data: encodeGetPool(WETH, USDG, f) }));
@@ -389,7 +389,11 @@ function spark() {
   const mid = (lo + hi) / 2, floor = mid * 0.0006;
   if (hi - lo < floor) { lo = mid - floor / 2; hi = mid + floor / 2; }
   const pad = (hi - lo) * 0.3; lo -= pad; hi += pad;
-  const X = (i) => (i / (ticks.length - 1)) * W;
+  /* Grow into the width rather than stretch to fill it. With two samples the
+     old mapping drew one straight segment across the whole widget, which reads
+     as a dead market rather than as a chart that has just started. */
+  const slots = Math.max(ticks.length, 24) - 1;
+  const X = (i) => (i / slots) * W;
   const Y = (v) => H - ((v - lo) / (hi - lo)) * H;
   ctx.beginPath();
   ticks.forEach((p, i) => { const y = Y(p); i ? ctx.lineTo(X(i), y) : ctx.moveTo(X(i), y); });
@@ -415,7 +419,7 @@ async function loop() {
       $("hstate").textContent = "chain unreachable";
     }
   }
-  setTimeout(loop, misses > 2 ? Math.min(3000 * misses, 20000) : 3000);
+  timer = setTimeout(loop, misses > 2 ? Math.min(3000 * misses, 20000) : 3000);
 }
 
 (async () => {
@@ -426,8 +430,12 @@ async function loop() {
   }
   loop();
 })();
+/* Waking the loop must not leave the sleeping one running. Without the clear,
+   every return to this tab added a whole second polling chain: the samples then
+   arrived several times faster than 3s, so 120 of them covered a fraction of
+   the wall clock they should have, and the line flattened accordingly. */
 document.addEventListener("visibilitychange", () => {
-  if (document.visibilityState === "visible") loop();
+  if (document.visibilityState === "visible") { clearTimeout(timer); loop(); }
 });
 </script>
 </body>

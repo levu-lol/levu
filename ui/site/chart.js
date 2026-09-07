@@ -520,10 +520,16 @@ export class Chart {
   }
 }
 
+/* Local time, and always with the hour.
+ *
+ * This used to drop the hour below the 1m timeframe and read MM:SS, which is
+ * indistinguishable from HH:MM at a glance -- 04:35 looks like twenty-five to
+ * five. It was also UTC, while the fills table next to it prints local time, so
+ * a fill stamped 18:20:35 could not be found on an axis reading 20:35. One
+ * clock for the whole terminal, and the reader's own. */
 function hhmmss(ms, tf) {
   const d = new Date(ms);
   const p = (v) => String(v).padStart(2, "0");
-  return tf >= 60_000
-    ? `${p(d.getUTCHours())}:${p(d.getUTCMinutes())}`
-    : `${p(d.getUTCMinutes())}:${p(d.getUTCSeconds())}`;
+  const hm = `${p(d.getHours())}:${p(d.getMinutes())}`;
+  return tf >= 60_000 ? hm : `${hm}:${p(d.getSeconds())}`;
 }
