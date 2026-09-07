@@ -40,7 +40,7 @@ void main(){
   vec2 c = vec2(uCursor.x * aspect, uCursor.y);
   vec2 view = (uCursor - 0.5);
 
-  float near = exp(-distance(a, c) * 3.4); // how close this pixel is to the cursor
+  float near = exp(-distance(a, c) * 2.2); // how close this pixel is to the cursor
 
   vec3 col = vec3(0.0);
 
@@ -52,8 +52,8 @@ void main(){
   vec2 q = sp * 17.0;
   vec2 id = floor(q), f = fract(q) - 0.5;
 
-  float gate = step(0.88, hash(id));
-  float core = exp(-length(f) * 36.0);
+  float gate = step(0.74, hash(id));
+  float core = exp(-length(f) * 30.0);
   float cross = exp(-abs(f.x) * 62.0 - abs(f.y) * 7.0)
               + exp(-abs(f.y) * 62.0 - abs(f.x) * 7.0);
   float tw = 0.22 + 0.78 * pow(0.5 + 0.5 * sin(uTime * 1.15 + hash(id) * 30.0
@@ -61,7 +61,7 @@ void main(){
 
   // Cool white at rest; stars near the cursor pull toward the accent.
   vec3 star = mix(vec3(0.60, 0.76, 0.86), vec3(0.10, 0.95, 0.62), min(near * 1.3, 1.0));
-  col += star * gate * (core + cross * 0.70) * tw * (0.10 + near * 0.42 + uEnergy * 0.08);
+  col += star * gate * (core + cross * 0.80) * tw * (0.16 + near * 0.55 + uEnergy * 0.10);
 
   /* --- Caustics, hero only -------------------------------------------- */
   float inHero = smoothstep(uHero - 0.14, uHero + 0.22, uv.y);
@@ -72,7 +72,7 @@ void main(){
                     sin(p.y - p.x * 0.35 - uTime * 0.23));
     float caustic = pow(1.0 - smoothstep(0.0, 0.16, net), 3.0);
     col += vec3(0.0, 0.898, 0.549) * caustic * inHero
-           * (0.012 + near * 0.20 + uEnergy * 0.04);
+           * (0.026 + near * 0.32 + uEnergy * 0.05);
   }
 
   /* --- One ring per click --------------------------------------------- */
