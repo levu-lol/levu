@@ -292,6 +292,19 @@ let lastPrice = null;
  * Fixed 2dp is fine for a $2,500 market and useless for one priced at 0.0001:
  * every axis label, the header and the tape all read "0.00". The terminal now
  * covers assets four orders of magnitude apart, so precision follows the price. */
+/* One clock for the whole terminal, and it is the reader's own. The chart
+   axis, the tape and the footer stamp used to disagree -- the axis dropped the
+   hour entirely, and everything else was UTC -- so a row in the tape could not
+   be found on the chart. The footer names the zone so the choice is visible. */
+const pad2 = (v) => String(v).padStart(2, "0");
+const hms = (d) => `${pad2(d.getHours())}:${pad2(d.getMinutes())}:${pad2(d.getSeconds())}`;
+const stamp = (d) => {
+  const zone = new Intl.DateTimeFormat("en-GB", { timeZoneName: "short" })
+    .formatToParts(d).find((x) => x.type === "timeZoneName");
+  return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())} ` +
+         `${hms(d)} ${zone ? zone.value : "local"}`;
+};
+
 const money = (v, dp = null) => {
   if (!isFinite(v)) return "—";
   if (dp !== null && Math.abs(v) >= 1) {
@@ -466,7 +479,7 @@ function paint(t) {
   $("srcs").textContent = t.agg.used.length + " of " + (t.sources.length + t.failed.length);
   $("ticks").textContent = ticks.length;
   $("lat").textContent = t.latency;
-  $("stamp").textContent = t.at.toISOString().replace("T", " ").replace(/\..*/, " UTC");
+  $("stamp").textContent = stamp(t.at);
 
   $("score").textContent = market.score.toLocaleString();
   $("scoreSub").textContent = "measured by the engine, not here";
@@ -508,7 +521,7 @@ function paint(t) {
   const row = document.createElement("div");
   row.className = "trow";
   row.innerHTML =
-    '<span class="t num">' + t.at.toISOString().slice(11, 19) + "</span>" +
+    '<span class="t num">' + hms(t.at) + "</span>" +
     '<span class="p num ' + dir + '">' + money(t.index, 4) + "</span>" +
     '<span class="c num">' + t.agg.confidence + "</span>";
   tape.insertBefore(row, tape.firstChild);
