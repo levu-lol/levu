@@ -30,11 +30,11 @@
      no light variant, and every colour below is stated rather than inherited
      from whatever ground the browser paints. */
   color-scheme:dark;
-  --paper:#05070A;--surface:#0B0F14;--surface-2:#121821;
-  --rule:#1E2632;--rule-soft:#161D27;
+  --paper:#0A0E12;--surface:#111820;--surface-2:#1A222B;
+  --rule:#28323E;--rule-soft:#1E2731;
   --text:#EAF2EE;--text-2:#9BAAA5;--text-3:#6B7A77;
   --ember:#00E58C;--ember-soft:#06251A;
-  --up:#00E58C;--down:#FF6B5A;--grid:#141B24;
+  --up:#00E58C;--down:#FF6B5A;--grid:#1C242E;
 }
 *{box-sizing:border-box}
 body{margin:0;background:var(--paper);color:var(--text);
@@ -62,7 +62,13 @@ nav a:hover{color:var(--ember)}
 .cta{display:inline-block;padding:6px 13px;border-radius:3px;background:var(--ember);
   color:var(--paper)!important;font-weight:500;font-size:13px;text-decoration:none}
 
-header.hero{padding:76px 0 58px;border-bottom:1px solid var(--rule)}
+header.hero{padding:76px 0 58px;border-bottom:1px solid var(--rule);
+  position:relative;overflow:hidden;isolation:isolate}
+/* The light field. Sits behind the hero content and never takes a click --
+   the pointer events it needs are listened for on the header itself. */
+.hero-glow{position:absolute;inset:0;width:100%;height:100%;
+  display:block;z-index:-1;pointer-events:none}
+@media(prefers-reduced-motion:reduce){.hero-glow{display:none}}
 .hero-grid{display:grid;grid-template-columns:minmax(0,1.15fr) minmax(0,.85fr);
   gap:44px;align-items:center}
 @media(max-width:860px){.hero-grid{grid-template-columns:1fr;gap:32px}}
@@ -160,7 +166,7 @@ footer a{color:var(--text-2)}
   <a class="cta" href="/trade">Paper trade →</a>
 </div></nav>
 
-<header class="hero"><div class="wrap"><div class="hero-grid">
+<header class="hero"><canvas class="hero-glow" aria-hidden="true"></canvas><div class="wrap"><div class="hero-grid">
   <div>
     <svg class="hero-mark" viewBox="0 0 240 320" aria-hidden="true">
       <path fill="currentColor" fill-rule="evenodd"
@@ -273,6 +279,11 @@ footer a{color:var(--text-2)}
   straight from your browser. No positions exist in these markets.
   <br><a href="/trade">Paper trading</a> · <a href="/terminal">Live terminal</a>
 </div></footer>
+
+<script type="module">
+import { heroBackground } from "./hero-bg.js";
+heroBackground(document.querySelector(".hero-glow"), document.querySelector("header.hero"));
+</script>
 
 <script type="module">
 /* The hero's price is the product's own claim, made in public. It runs the same
