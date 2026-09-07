@@ -155,7 +155,7 @@ footer a{color:var(--text-2)}
   </a>
   <span class="spacer"></span>
   <a href="#how">What's different</a>
-  <a href="#evidence">Why you can leave</a>
+  <a href="#evidence">Where this is</a>
   <a class="lnk" href="/terminal">Live terminal</a>
   <a class="cta" href="/trade">Paper trade →</a>
 </div></nav>
@@ -170,11 +170,11 @@ footer a{color:var(--text-2)}
             d="M122 6 L122 314 L214 178 C234 150 234 138 214 112 Z
                M122 6 C128 92 148 140 196 159 C148 178 128 226 122 314 Z"/>
     </svg>
-    <h1>Perp markets that <em>appear</em>, scale, and retire on their own.</h1>
+    <h1>Every market <em>earns</em> its leverage.</h1>
     <p class="lede">
-      Trade perps on tokens no exchange has got around to listing. Markets open when
-      there is enough liquidity to support them, leverage moves with the book while
-      you hold, and a fading market steps down instead of shutting on you.
+      Perps on 57 Robinhood Chain markets. Each one opens at 1&times; and earns
+      leverage from the depth of the book that would have to absorb a forced
+      close &mdash; measured every three seconds, and taken away the same way.
     </p>
     <div class="hero-actions">
       <a class="cta" href="/trade">Paper trade 57 markets</a>
@@ -201,103 +201,73 @@ footer a{color:var(--text-2)}
 </div></div></header>
 
 <section id="how"><div class="wrap">
-  <h2>Perps on tokens nobody else will list</h2>
-  <p class="sub">The three things that are different, from where you sit.</p>
-
+  <h2>Three things that are different</h2>
   <div class="cols">
     <div class="card">
-      <h3>The long tail actually has markets</h3>
-      <p>Most tokens never get a perp anywhere, because listing one is a decision
-         a committee makes over weeks. Here it happens when the market can support
-         it — spot first, leverage once there is a book to lend against.</p>
+      <h3>Markets nobody else lists</h3>
+      <p>Listing here is a measurement, not a committee: spot from day one,
+         leverage once there is a book to lend against.</p>
     </div>
     <div class="card">
-      <h3>Leverage scales with the book</h3>
-      <p>Not a tier somebody picked. A deep market carries tens of times, a thin
-         one single digits, and it moves while you hold — so you are never
-         quietly over-levered on a market that got worse overnight.</p>
+      <h3>Leverage moves with the book</h3>
+      <p>Not a tier somebody picked. It rises as depth arrives and falls as it
+         leaves, while you hold &mdash; and it falls with your position size too.</p>
     </div>
     <div class="card">
-      <h3>A dying market doesn't dump you</h3>
-      <p>When liquidity fades, leverage comes off first and the market keeps
-         trading at 1×. You get time to leave. Nobody force-closes the whole book
-         into an empty one.</p>
+      <h3>A fading market lets you out</h3>
+      <p>Leverage comes off first and the market keeps trading at 1&times;.
+         Nobody force-closes a book into an empty one.</p>
     </div>
   </div>
 </div></section>
 
 <section><div class="wrap">
-  <h2>Leverage comes from the book, not a tier</h2>
-  <p class="sub">No fixed number per market. What you can borrow is what the market can absorb.</p>
-  <div class="ladder">
-    <div class="rung off"><span class="n">1×</span><span class="s">under $250k book<br>spot only</span></div>
-    <div class="rung"><span class="n">10×</span><span class="s">$250k book</span></div>
-    <div class="rung"><span class="n">20×</span><span class="s">$500k book</span></div>
-    <div class="rung"><span class="n">33×</span><span class="s">$2M and above</span></div>
-  </div>
-  <p style="margin-top:24px">
-    Most exchanges pick a number per market and defend it. Here it is a
-    consequence: what it would cost to close the largest position the market
-    allows. A deep book is cheap to close, so it carries more. A thin one is not.
-    And it moves while you hold, without anyone republishing a tier list.
+  <h2>How the number is set</h2>
+  <p class="sub">One rule, applied every three seconds.</p>
+  <p>
+    A position is only as safe as the book that would have to absorb closing it.
+    So that book &mdash; <b>our own resting depth, not the venue&rsquo;s</b> &mdash; is what
+    leverage is priced from. Below $25,000 of resting depth there is no leverage
+    at all: a book that small cannot absorb a liquidation, and lending against it
+    would be offering a position nobody can close. The market still trades, fully
+    collateralised, until somebody quotes it properly.
   </p>
   <p>
-    <b>Under $250k of resting depth there is no leverage at all.</b> Not reduced
-    leverage — none. A book that small cannot absorb a liquidation, and offering
-    to lend against it would be offering a position nobody can close. The market
-    still trades, at full collateral, until somebody quotes it properly.
+    Above that it scales, and it keeps scaling down as your size grows against
+    the book. The ticket shows what <em>you</em> get before you commit, rather
+    than quoting a headline and filling you at something else. A market has to
+    hold its health score for thirty minutes before it offers leverage at all,
+    and loses it the same way.
   </p>
-  <p>
-    For the same reason no single position may exceed a quarter of the book it
-    would be closed in, however much capital is backing the market. Capital
-    absorbs a loss; it does not fill an order.
-  </p>
-  <p>
-    <b>And the number is yours, not the market's.</b> The figure above is what a
-    small position gets. Ask for a size that is large against the book and the
-    leverage comes down with it — 33× at a thousand dollars, 24× at a million in
-    the same market — because closing your position is what your margin is
-    paying for. The ticket shows what <em>you</em> get before you commit to it,
-    rather than quoting a headline and filling you at something else.
-  </p>
-  <p>
-    <b>33× is where our fees put the ceiling today, not where the engine stops.</b>
-    Liquidation has to leave an account solvent on the fee alone, so the fee sets
-    a floor under margin and a roof over leverage. Cut the fee and the roof
-    rises — to 100× at a fee of zero, which is where the risk engine itself stops.
-    We would rather quote the number we can actually honour.
-  </p>
-  <p>
-    The bottom of the ladder matters as much as the top. A market that has gone
-    quiet drops to <b>1×</b> and stays open at full collateral, instead of being
-    closed on you. That is the difference between choosing when to exit and
-    finding out you already have.
+  <p class="sub" style="margin-top:20px">
+    Every figure above is live on the <a href="/trade">trading page</a> &mdash;
+    what each market has earned, what it currently offers, and the blocker when
+    those differ.
   </p>
 </div></section>
 
 <section id="evidence"><div class="wrap">
-  <h2>Why you can leave</h2>
-  <p class="sub">The part worth checking before you fund anything.</p>
+  <h2>Where this actually is</h2>
+  <p class="sub">Worth knowing before you spend time on it.</p>
   <ul>
-    <li><b>Your collateral sits in a contract, not with us.</b> We move positions,
-        not balances.</li>
-    <li><b>You can withdraw without our help.</b> Every position is committed on
-        chain with a proof you can use yourself. If we vanish, you still get paid —
-        that path is built and tested, not a promise.</li>
-    <li><b>Liquidation size is capped by what can actually be sold.</b> Exposure is
-        limited to what the book can absorb, and no single account may be more
-        than a tenth of a market — so a liquidation is not a hole somebody else
-        pays for.</li>
-    <li><b>The price is checked in your browser.</b> The number in the hero is not
-        our API. It is read from the chain by this page, and the terminal shows
-        every source behind it.</li>
+    <li><b>The exchange is live and the money is not real.</b> 57 markets, real
+        Robinhood Chain prices, real matching, real margin and liquidations
+        &mdash; settled in tUSDG from a faucet. Nothing at risk, nothing to gain.</li>
+    <li><b>Settlement contracts are deployed and exercised.</b> On Robinhood
+        Chain testnet: a deposit, a state root, and a withdrawal against an
+        inclusion proof with no operator involved. The exchange does not commit
+        its roots yet &mdash; that is the next step, not a claim.</li>
+    <li><b>The sequencer is trusted today.</b> The verifier on chain reports it
+        itself: <em>authenticated, not proven</em>. A validity verifier is
+        written and tested; swapping it is one argument.</li>
   </ul>
   <div class="note">
     <b>Fair warning.</b> These markets are new and the thresholds behind them are
-    judgement so far, not history. Leverage is capped low on purpose while that is
-    true. Small tokens move violently and 1× can still hurt.
+    judgement so far, not history. Leverage is capped low on purpose while that
+    is true. Small tokens move violently and 1&times; can still hurt.
   </div>
 </div></section>
+
 <footer><div class="wrap">
   Prices on the terminal are read live from Uniswap pools on Robinhood Chain,
   straight from your browser. No positions exist in these markets.
